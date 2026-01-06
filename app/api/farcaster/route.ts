@@ -1,13 +1,18 @@
-import { NextResponse } from "next/server";
-
 export async function GET() {
-  return NextResponse.json({
-    name: "Base Mini App",
-    description: "My first Base Mini App",
-    icon: "https://repand-claretta-semiexperimentally.ngrok-free.dev/favicon.ico",
-    home_url: "https://repand-claretta-semiexperimentally.ngrok-free.dev",
-    version: "1.0.0",
+  return Response.json({
+    accountAssociation: {
+      header: "eyJmaWQiOjE0NTEyMjgsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHgwZjlFMjNBNzJmMTNjYzNkZUUxNzUxODFGMTY1OWIxNjI4RjlFNjE2In0",
+      payload: "eyJkb21haW4iOiJuZXctbWluaS1hcHAtcXVpY2tzdGFydC1vbWVnYS1uaW5lLnZlcmNlbC5hcHAifQ",
+      signature: "o21xykGx3xe8Yf4KdFcfeey9FvZn6tQtCrQ5YZeE9QoJTft84WBjSK62L8udaPHUe9tq+d5m8RlBSRniYl/FQxs="
+    },
+    miniapp: {
+      version: "1",
+      name: "Cubey",
+      subtitle: "Your AI Ad Companion",
+      description: "Ads",
+      iconUrl: "https://new-mini-app-quickstart-omega-nine.vercel.app/blue-icon.png",
+      homeUrl: "https://new-mini-app-quickstart-omega-nine.vercel.app",
+      primaryCategory: "social"
+    }
   });
 }
-
-
