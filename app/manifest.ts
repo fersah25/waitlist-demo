@@ -16,7 +16,7 @@ export default function manifest(): MetadataRoute.Manifest {
         type: 'image/x-icon',
       },
     ],
-    // @ts-ignore - Base specific field
+    // @ts-expect-error - Base specific field required for account association
     accountAssociation: {
       header: "eyJmaWQiOi0xLCJ0eXBlIjoiYXV0aCIsImtleSI6IjB4MDAzOTMxZmUzM0IwMEUwQmNkMDMyNjdiZjdBOTQ1QmMxYjEwMTUzNyJ9",
       payload: "eyJkb21haW4iOiJuZXctbWluaS1hcHAtcXVpY2tzdGFydC1vbWVnYS1uaW5lLnZlcmNlbC5hcHAifQ",
@@ -24,7 +24,3 @@ export default function manifest(): MetadataRoute.Manifest {
     }
   };
 }
-
-
-
-
