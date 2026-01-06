@@ -1,0 +1,10 @@
+{
+  "name": "Base Mini App",
+  "description": "My first Base mini app",
+  "icon": "https://your-vercel-url.vercel.app/icon.png",
+  "accountAssociation": {
+    "address": "",
+    "signature": ""
+  }
+}
+≈

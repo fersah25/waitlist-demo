@@ -10,20 +10,23 @@ export async function generateMetadata(): Promise<Metadata> {
     title: minikitConfig.miniapp.name,
     description: minikitConfig.miniapp.description,
     other: {
-      "fc:frame": JSON.stringify({
-        version: minikitConfig.miniapp.version,
-        imageUrl: minikitConfig.miniapp.heroImageUrl,
-        button: {
-          title: `Join the ${minikitConfig.miniapp.name} Waitlist`,
-          action: {
-            name: `Launch ${minikitConfig.miniapp.name}`,
-            type: "launch_frame",
-          },
-        },
-      }),
+  "base:app_id": "6952ee814d3a403912ed8567",
+  "fc:frame": JSON.stringify({
+    version: minikitConfig.miniapp.version,
+    imageUrl: minikitConfig.miniapp.heroImageUrl,
+    button: {
+      title: `Join the ${minikitConfig.miniapp.name} Waitlist`,
+      action: {
+        name: `Launch ${minikitConfig.miniapp.name}`,
+        type: "launch_frame",
+      },
     },
-  };
+  }),
+ },
+};
 }
+
+
 
 const inter = Inter({
   variable: "--font-inter",
