@@ -1,5 +1,7 @@
+import { NextResponse } from "next/server";
+
 export async function GET() {
-  return Response.json({
+  return NextResponse.json({
     accountAssociation: {
       header: "eyJmaWQiOjE0NTEyMjgsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHgwZjlFMjNBNzJmMTNjYzNkZUUxNzUxODFGMTY1OWIxNjI4RjlFNjE2In0",
       payload: "eyJkb21haW4iOiJuZXctbWluaS1hcHAtcXVpY2tzdGFydC1vbWVnYS1uaW5lLnZlcmNlbC5hcHAifQ",
