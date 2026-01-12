@@ -7,24 +7,26 @@ import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
-    title: minikitConfig.miniapp.name,
-    description: minikitConfig.miniapp.description,
+    title: "Cubey",
+    description: "Your AI Ad Companion",
     other: {
-  "base:app_id": "6952ee814d3a403912ed8567",
-  "fc:frame": JSON.stringify({
-    version: minikitConfig.miniapp.version,
-    imageUrl: minikitConfig.miniapp.heroImageUrl,
-    button: {
-      title: `Join the ${minikitConfig.miniapp.name} Waitlist`,
-      action: {
-        name: `Launch ${minikitConfig.miniapp.name}`,
-        type: "launch_frame",
-      },
+      "fc:frame": JSON.stringify({
+        version: "next",
+        imageUrl: "https://new-mini-app-quickstart-omega-nine.vercel.app/blue-icon.png",
+        button: {
+          title: "Launch Cubey",
+          action: {
+            type: "launch_mini_app",
+            name: "Cubey",
+            url: "https://new-mini-app-quickstart-omega-nine.vercel.app",
+            splashImageUrl: "https://new-mini-app-quickstart-omega-nine.vercel.app/blue-icon.png",
+            splashBackgroundColor: "#000000",
+          },
+        },
+      }),
     },
-  }),
- },
-};
-}
+  };
+}  
 
 
 
