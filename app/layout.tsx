@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Source_Code_Pro } from "next/font/google";
 import { RootProvider } from "./rootProvider";
-import { SafeArea } from "@coinbase/onchainkit/minikit"; // Bu satırı ekledik
+import { SafeArea } from "@coinbase/onchainkit/minikit";
 import "./globals.css";
 
 const inter = Inter({
