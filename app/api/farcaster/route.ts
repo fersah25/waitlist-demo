@@ -14,6 +14,7 @@ export async function GET() {
       description: "Ads",
       iconUrl: "https://new-mini-app-quickstart-omega-nine.vercel.app/blue-icon.png",
       homeUrl: "https://new-mini-app-quickstart-omega-nine.vercel.app",
+      webhookUrl: "https://new-mini-app-quickstart-omega-nine.vercel.app/api/webhook",
       primaryCategory: "social"
     }
   });
