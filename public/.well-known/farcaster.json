@@ -12,6 +12,8 @@
     "imageUrl": "https://new-mini-app-quickstart-omega-nine.vercel.app/blue-icon.png",
     "buttonTitle": "Launch Cubey",
     "splashImageUrl": "https://new-mini-app-quickstart-omega-nine.vercel.app/blue-icon.png",
-    "splashBackgroundColor": "#000000"
+    "splashBackgroundColor": "#000000",
+    "primaryCategory": "social",
+    "tags": ["social", "ai", "ads"]
   }
 }
