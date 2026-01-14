@@ -1,41 +1,22 @@
 "use client";
-import { useEffect } from "react";
-import * as minikit_lib from "@coinbase/onchainkit/minikit";
 import styles from "../page.module.css";
 
 export default function Success() {   
   
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      try {
-        // @ts-ignore
-        const mk = minikit_lib.MiniKit || (minikit_lib as any).MiniKit;
-        if (mk && typeof mk.install === 'function') {
-          mk.install();
-        }
-      } catch (e) {
-        console.error("MiniKit initialization error:", e);
+  const handleShare = () => {
+    // Warpcast paylaşım ekranını tetikleyen ham protokol komutu
+    const shareCommand = {
+      type: "compose-cast", 
+      data: {
+        text: "I just joined the CUBEY waitlist! 🚀",
+        embeds: ["https://new-mini-app-quickstart-omega-nine.vercel.app/"]
       }
-    }
-  }, []);
+    };
 
-  const handleShare = async () => {
     if (typeof window !== "undefined") {
-      try {
-        // @ts-ignore
-        const mk = minikit_lib.MiniKit || (minikit_lib as any).MiniKit;
-        
-        if (mk?.commands?.composeCast) {
-          await mk.commands.composeCast({
-            text: "I just joined the CUBEY waitlist! 🚀",
-            embeds: ["https://new-mini-app-quickstart-omega-nine.vercel.app/"]
-          });
-        } else {
-          alert("Please open this in Warpcast!");
-        }
-      } catch (error) {
-        console.error("Share error:", error);
-      }
+      // Warpcast uygulamasına direkt mesaj gönderiyoruz
+      window.parent.postMessage(shareCommand, "*");
+      console.log("Paylaşım komutu gönderildi");
     }
   };
 
