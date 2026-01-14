@@ -20,7 +20,8 @@ export default function Success() {
     <div className={styles.container}>
       <div className={styles.content}>
         <h1 className={styles.title}>Welcome to CUBEY!</h1>
-        <p className={styles.subtitle}>You're in! Get ready for the future of marketing.</p>
+        {/* 'Yerine &apos; kullanarak React hatasını çözdük */}
+        <p className={styles.subtitle}>You&apos;re in! Get ready for the future of marketing.</p>
         <button onClick={handleShare} className={styles.joinButton}>
           SHARE ON WARPCAST
         </button>
