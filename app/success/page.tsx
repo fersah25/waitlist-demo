@@ -1,21 +1,20 @@
 "use client";
 import { useEffect } from "react";
-// Importu bu şekilde değiştiriyoruz (en garantisi budur)
-import * as OnchainKitMinikit from "@coinbase/onchainkit/minikit";
+import * as minikit_lib from "@coinbase/onchainkit/minikit";
 import styles from "../page.module.css";
 
-export default function Success() {    
+export default function Success() {   
   
   useEffect(() => {
     if (typeof window !== "undefined") {
       try {
-        // Kütüphaneyi 'any' olarak yakalayıp içindeki MiniKit'e ulaşıyoruz
-        const minikit = (OnchainKitMinikit as any).MiniKit || OnchainKitMinikit;
-        if (minikit && minikit.install) {
-          minikit.install();
+        // @ts-ignore
+        const mk = minikit_lib.MiniKit || (minikit_lib as any).MiniKit;
+        if (mk && typeof mk.install === 'function') {
+          mk.install();
         }
       } catch (e) {
-        console.error("MiniKit install hatası:", e);
+        console.error("MiniKit initialization error:", e);
       }
     }
   }, []);
@@ -23,20 +22,19 @@ export default function Success() {
   const handleShare = async () => {
     if (typeof window !== "undefined") {
       try {
-        // MiniKit objesini her türlü ihtimale karşı buluyoruz
-        const minikit = (OnchainKitMinikit as any).MiniKit || OnchainKitMinikit;
+        // @ts-ignore
+        const mk = minikit_lib.MiniKit || (minikit_lib as any).MiniKit;
         
-        if (minikit?.commands?.composeCast) {
-          await minikit.commands.composeCast({
+        if (mk?.commands?.composeCast) {
+          await mk.commands.composeCast({
             text: "I just joined the CUBEY waitlist! 🚀",
             embeds: ["https://new-mini-app-quickstart-omega-nine.vercel.app/"]
           });
         } else {
-          // Eğer hala bulamazsa manuel tetikleme deniyoruz
-          alert("Lütfen Warpcast içinden açın!");
+          alert("Please open this in Warpcast!");
         }
       } catch (error) {
-        console.error("Paylaşım hatası:", error);
+        console.error("Share error:", error);
       }
     }
   };
