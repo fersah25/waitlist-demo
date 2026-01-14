@@ -17,12 +17,7 @@ export default function Home() {
     if (!isFrameReady) {
       setFrameReady();
     }
-  }, [setFrameReady, isFrameReady]);
-
-  const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
+  }, [setFrameReady, isFrameReady]); 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,12 +28,13 @@ export default function Home() {
       return;
     }
 
-    if (!validateEmail(email)) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
       setError("Please enter a valid email address");
       return;
     }
 
-    // Auth kontrolünü geçici olarak devre dışı bıraktık, direkt success'e gidiyoruz
+    // Her şey okeyse direkt başarı sayfasına uçur
     router.push("/success");
   };
 
@@ -74,7 +70,7 @@ export default function Home() {
               onChange={(e) => setEmail(e.target.value)}
               className={styles.emailInput}
             />
-            {error && <p className={styles.error} style={{color: 'red'}}>{error}</p>}
+            {error && <p className={styles.error} style={{color: 'red', marginTop: '10px'}}>{error}</p>}
             <button type="submit" className={styles.joinButton}>JOIN WAITLIST</button>
           </form>
         </div>
