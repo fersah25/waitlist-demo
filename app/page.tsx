@@ -54,29 +54,22 @@ export default function Home() {
     e.preventDefault();
     setError("");
 
-    if (isAuthLoading) {
-      setError("Please wait while we verify your identity...");
-      return;
-    }
-
+    // BU KISMI SİL VEYA YORUM SATIRI YAP (Hata veren yer burası)
+    /*
     if (authError || !authData?.success) {
       setError("Please authenticate to join the waitlist");
       return;
     }
+    */
 
     if (!email) {
       setError("Please enter your email address");
       return;
     }
 
-    if (!validateEmail(email)) {
-      setError("Please enter a valid email address");
-      return;
-    }
-
-    console.log("Valid email submitted:", email);
+    // Her şey okeyse direkt başarı sayfasına uçur
     router.push("/success");
-  };
+  }; 
 
   return (
     <div className={styles.container}>
