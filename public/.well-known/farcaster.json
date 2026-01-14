@@ -14,6 +14,6 @@
     "splashImageUrl": "https://new-mini-app-quickstart-omega-nine.vercel.app/blue-icon.png",
     "splashBackgroundColor": "#000000",
     "primaryCategory": "social",
-    "tags": ["social", "ai", "ads"]
+    "tags": ["social", "ai", "ads" , "v1"] 
   }
 }
