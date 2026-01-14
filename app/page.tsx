@@ -4,7 +4,6 @@ import { useMiniKit } from "@coinbase/onchainkit/minikit";
 import { ConnectWallet, Wallet, WalletDropdown, WalletDropdownDisconnect } from "@coinbase/onchainkit/wallet";
 import { Address, Avatar, Name, Identity, EthBalance } from "@coinbase/onchainkit/identity";
 import { useRouter } from "next/navigation";
-import { minikitConfig } from "../minikit.config";
 import styles from "./page.module.css";
 
 export default function Home() {
@@ -17,33 +16,23 @@ export default function Home() {
     if (!isFrameReady) {
       setFrameReady();
     }
-  }, [setFrameReady, isFrameReady]); 
+  }, [isFrameReady, setFrameReady]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
-
-    if (!email) {
-      setError("Please enter your email address");
+    if (!email || !email.includes("@")) {
+      setError("Please enter a valid email");
       return;
     }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      setError("Please enter a valid email address");
-      return;
-    }
-
-    // Her şey okeyse direkt başarı sayfasına uçur
     router.push("/success");
   };
 
   return (
     <div className={styles.container}>
-      <header className="w-full flex justify-between items-center p-4 absolute top-0 left-0">
+      <header className="w-full flex justify-between items-center p-4 absolute top-0 left-0 z-10">
         <div className="font-bold text-xl text-white">CUBEY</div>
         <Wallet>
-          <ConnectWallet className="bg-[#0052FF] text-white rounded-full px-4 py-2 text-sm font-bold shadow-lg">
+          <ConnectWallet className="bg-[#0052FF]">
             <Avatar className="h-6 w-6" />
             <Name />
           </ConnectWallet>
@@ -59,22 +48,20 @@ export default function Home() {
       <div className={styles.content}>
         <div className={styles.waitlistForm}>
           <h1 className={styles.title}>Join CUBEY</h1>
-          <p className={styles.subtitle}>
-             Hey {context?.user?.displayName || "there"}, Get early access and be the first to experience the future of marketing.
-          </p>
+          <p className={styles.subtitle}>Hey {context?.user?.displayName || "there"}, get early access.</p>
           <form onSubmit={handleSubmit} className={styles.form}>
             <input
               type="email"
-              placeholder="Your amazing email"
+              placeholder="Your email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className={styles.emailInput}
             />
-            {error && <p className={styles.error} style={{color: 'red', marginTop: '10px'}}>{error}</p>}
+            {error && <p className="text-red-500 mt-2">{error}</p>}
             <button type="submit" className={styles.joinButton}>JOIN WAITLIST</button>
           </form>
         </div>
       </div>
     </div>
   );
-}
+} 
