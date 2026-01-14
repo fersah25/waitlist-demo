@@ -1,6 +1,19 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useQuickAuth,useMiniKit } from "@coinbase/onchainkit/minikit";
+import { useQuickAuth, useMiniKit } from "@coinbase/onchainkit/minikit";
+import { 
+  ConnectWallet, 
+  Wallet, 
+  WalletDropdown, 
+  WalletDropdownDisconnect 
+} from "@coinbase/onchainkit/wallet";
+import {
+  Address,
+  Avatar, 
+  Name,
+  Identity,
+  EthBalance,
+} from "@coinbase/onchainkit/identity";
 import { useRouter } from "next/navigation";
 import { minikitConfig } from "../minikit.config";
 import styles from "./page.module.css";
@@ -8,13 +21,12 @@ import styles from "./page.module.css";
 interface AuthResponse {
   success: boolean;
   user?: {
-    fid: number; // FID is the unique identifier for the user
+    fid: number;
     issuedAt?: number;
     expiresAt?: number;
   };
-  message?: string; // Error messages come as 'message' not 'error'
+  message?: string;
 }
-
 
 export default function Home() {
   const { isFrameReady, setFrameReady, context } = useMiniKit();
@@ -22,23 +34,11 @@ export default function Home() {
   const [error, setError] = useState("");
   const router = useRouter();
 
-  // Initialize the  miniapp
   useEffect(() => {
     if (!isFrameReady) {
       setFrameReady();
     }
   }, [setFrameReady, isFrameReady]);
- 
-  
-
-  // If you need to verify the user's identity, you can use the useQuickAuth hook.
-  // This hook will verify the user's signature and return the user's FID. You can update
-  // this to meet your needs. See the /app/api/auth/route.ts file for more details.
-  // Note: If you don't need to verify the user's identity, you can get their FID and other user data
-  // via `context.user.fid`.
-  // const { data, isLoading, error } = useQuickAuth<{
-  //   userFid: string;
-  // }>("/api/auth");
 
   const { data: authData, isLoading: isAuthLoading, error: authError } = useQuickAuth<AuthResponse>(
     "/api/auth",
@@ -54,7 +54,6 @@ export default function Home() {
     e.preventDefault();
     setError("");
 
-    // Check authentication first
     if (isAuthLoading) {
       setError("Please wait while we verify your identity...");
       return;
@@ -75,20 +74,33 @@ export default function Home() {
       return;
     }
 
-    // TODO: Save email to database/API with user FID
     console.log("Valid email submitted:", email);
-    console.log("User authenticated:", authData.user);
-    
-    // Navigate to success page
     router.push("/success");
   };
 
   return (
     <div className={styles.container}>
-      <button className={styles.closeButton} type="button">
-        ✕
-      </button>
-      
+      {/* HEADER: Cüzdan Butonu Buraya Gelecek */}
+      <header className="w-full flex justify-between items-center p-4 absolute top-0">
+        <div className="font-bold text-xl">{minikitConfig.miniapp.name.toUpperCase()}</div>
+        
+        <Wallet>
+          <ConnectWallet className="bg-[#0052FF] text-white rounded-full px-4 py-2 text-sm font-bold shadow-lg">
+            <Avatar className="h-6 w-6" />
+            <Name />
+          </ConnectWallet>
+          <WalletDropdown>
+            <Identity className="px-4 pt-3 pb-2" hasCopyAddressOnClick>
+              <Avatar />
+              <Name />
+              <Address />
+              <EthBalance />
+            </Identity>
+            <WalletDropdownDisconnect />
+          </WalletDropdown>
+        </Wallet>
+      </header>
+
       <div className={styles.content}>
         <div className={styles.waitlistForm}>
           <h1 className={styles.title}>Join {minikitConfig.miniapp.name.toUpperCase()}</h1>
