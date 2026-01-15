@@ -16,17 +16,18 @@ const sourceCodePro = Source_Code_Pro({
 
 export async function generateMetadata(): Promise<Metadata> {
   const appUrl = "https://new-mini-app-quickstart-omega-nine.vercel.app";
+  
   const frameConfig = {
     version: "next",
     imageUrl: `${appUrl}/blue-icon.png`,
     button: {
       title: "Launch Cubey",
       action: {
-        type: "launch_miniapp", // DOĞRUSU BU: launch_miniapp
+        type: "launch_frame", // Dokümandaki kritik değişiklik bu!
         name: "Cubey",
         url: appUrl,
         splashImageUrl: `${appUrl}/blue-icon.png`,
-        splashBackgroundColor: "#000000",
+        splashBackgroundColor: "#000000", 
       },
     },
   };
@@ -35,7 +36,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: "Cubey",
     description: "Your AI Ad Companion",
     other: {
-      "fc:metadata": JSON.stringify(frameConfig), // fc:metadata daha günceldir
+      "fc:metadata": JSON.stringify(frameConfig),
     },
   };
 }
