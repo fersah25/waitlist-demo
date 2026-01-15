@@ -21,10 +21,10 @@ export async function generateMetadata(): Promise<Metadata> {
     version: "next",
     imageUrl: `${appUrl}/blue-icon.png`,
     button: {
-      title: "Launch Cubey",
+      title: "Launch fersahapp",
       action: {
         type: "launch_miniapp",
-        name: "Cubey",
+        name: "fersahapp",
         url: appUrl,
         splashImageUrl: `${appUrl}/blue-icon.png`, 
         splashBackgroundColor: "#000000",
@@ -33,11 +33,11 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 
   return {
-    title: "Cubey",
+    title: "fersahapp",
     description: "Your AI Ad Companion",
     // OG kısmını buraya ekledim, listedeki kırmızıları bu yeşil yapacak:
     openGraph: {
-      title: "Cubey",
+      title: "fersahapp",
       description: "Your AI Ad Companion",
       images: [`${appUrl}/blue-icon.png`],
       url: appUrl,
@@ -46,7 +46,7 @@ export async function generateMetadata(): Promise<Metadata> {
       "fc:miniapp": JSON.stringify(miniappConfig),
       "fc:frame": "vNext",
       "fc:frame:image": `${appUrl}/blue-icon.png`,
-      "fc:frame:button:1": "Launch Cubey",
+      "fc:frame:button:1": "Launch fersahapp",
       "fc:frame:button:1:action": "launch_miniapp",
       "fc:frame:button:1:target": appUrl,
     },

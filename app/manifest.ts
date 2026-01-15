@@ -2,8 +2,8 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Cubey',
-    short_name: 'Cubey',
+    name: 'fersahapp',
+    short_name: 'fersahapp',
     description: 'Your AI Ad Companion on Base',
     start_url: '/',
     display: 'standalone',

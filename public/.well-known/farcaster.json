@@ -6,17 +6,17 @@
   },
   "frame": {
     "version": "1",
-    "name": "Cubey",
+    "name": "fersahapp",
     "iconUrl": "https://new-mini-app-quickstart-omega-nine.vercel.app/blue-icon.png",
     "homeUrl": "https://new-mini-app-quickstart-omega-nine.vercel.app",
     "imageUrl": "https://new-mini-app-quickstart-omega-nine.vercel.app/blue-icon.png",
-    "buttonTitle": "Launch Cubey",
+    "buttonTitle": "Launch fersahapp",
     "splashImageUrl": "https://new-mini-app-quickstart-omega-nine.vercel.app/blue-icon.png",
     "splashBackgroundColor": "#000000",
     "primaryCategory": "social",
     "tags": ["social", "ai", "ads"],
     "subtitle": "AI powered ad companion",
-    "description": "Cubey is the ultimate AI powered ad companion for the Farcaster ecosystem built on Base",
+    "description": "fersahapp is the ultimate AI powered ad companion for the Farcaster ecosystem built on Base",
     "heroImageUrl": "https://new-mini-app-quickstart-omega-nine.vercel.app/blue-icon.png",
     "screenshotUrls": [
       "https://new-mini-app-quickstart-omega-nine.vercel.app/blue-icon.png"

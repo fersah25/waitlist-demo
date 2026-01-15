@@ -3,7 +3,7 @@
 This is a demo Mini App application built using OnchainKit and the Farcaster SDK. Build a waitlist sign-up mini app for your company that can be published to the Base app and Farcaster. 
 
 > [!IMPORTANT]  
-> Before interacting with this demo, please review our [disclaimer](#disclaimer) — there are **no official tokens or apps** associated with Cubey, Base, or Coinbase.
+> Before interacting with this demo, please review our [disclaimer](#disclaimer) — there are **no official tokens or apps** associated with fersahapp, Base, or Coinbase.
 
 ## Prerequisites
 
@@ -142,14 +142,14 @@ For detailed step-by-step instructions, see the [Create a Mini App tutorial](htt
 
 This project is a **demo application** created by the **Base / Coinbase Developer Relations team** for **educational and demonstration purposes only**.  
 
-**There is no token, cryptocurrency, or investment product associated with Cubey, Base, or Coinbase.**  
+**There is no token, cryptocurrency, or investment product associated with fersahapp, Base, or Coinbase.**  
 
-Any social media pages, tokens, or applications claiming to be affiliated with, endorsed by, or officially connected to Cubey, Base, or Coinbase are **unauthorized and fraudulent**.  
+Any social media pages, tokens, or applications claiming to be affiliated with, endorsed by, or officially connected to fersahapp, Base, or Coinbase are **unauthorized and fraudulent**.  
 
-We do **not** endorse or support any third-party tokens, apps, or projects using the Cubey name or branding.  
+We do **not** endorse or support any third-party tokens, apps, or projects using the fersahapp name or branding.  
 
 > [!WARNING]
-> Do **not** purchase, trade, or interact with any tokens or applications claiming affiliation with Coinbase, Base, or Cubey.  
+> Do **not** purchase, trade, or interact with any tokens or applications claiming affiliation with Coinbase, Base, or fersahapp.  
 > Coinbase and Base will never issue a token or ask you to connect your wallet for this demo.  
 
 For official Base developer resources, please visit:  

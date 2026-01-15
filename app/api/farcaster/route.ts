@@ -9,7 +9,7 @@ export async function GET() {
     },
     miniapp: { 
       version: "1",
-      name: "Cubey",
+      name: "fersahapp",
       subtitle: "Your AI Ad Companion",
       description: "Ads",
       iconUrl: "https://new-mini-app-quickstart-omega-nine.vercel.app/blue-icon.png",
