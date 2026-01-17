@@ -30,7 +30,7 @@ export default function Home() {
   return (
     <div className={styles.container}>
       <header className="w-full flex justify-between items-center p-4 absolute top-0 left-0 z-10">
-        <div className="font-bold text-xl text-white">CUBEY</div>
+        <div className="font-bold text-xl text-white">fersahapp</div>
         <Wallet>
           <ConnectWallet className="bg-[#0052FF]">
             <Avatar className="h-6 w-6" />
@@ -47,7 +47,7 @@ export default function Home() {
 
       <div className={styles.content}>
         <div className={styles.waitlistForm}>
-          <h1 className={styles.title}>Join CUBEY</h1>
+          <h1 className={styles.title}>Join fersahapp</h1>
           <p className={styles.subtitle}>Hey {context?.user?.displayName || "there"}, get early access.</p>
           <form onSubmit={handleSubmit} className={styles.form}>
             <input

@@ -8,7 +8,7 @@ export default function Success() {
     const shareCommand = {
       type: "compose-cast", 
       data: {
-        text: "I just joined the CUBEY waitlist! 🚀",
+        text: "I just joined the fersahapp waitlist! 🚀",
         embeds: ["https://new-mini-app-quickstart-omega-nine.vercel.app/"]
       }
     };
@@ -23,7 +23,7 @@ export default function Success() {
   return (
     <div className={styles.container}>
       <div className={styles.content}>
-        <h1 className={styles.title}>Welcome to CUBEY!</h1>
+        <h1 className={styles.title}>Welcome to fersahapp!</h1>
         <p className={styles.subtitle}>
           You&apos;re in! Get ready for the future of marketing.
         </p>
