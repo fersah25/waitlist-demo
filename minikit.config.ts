@@ -11,7 +11,7 @@ export const minikitConfig = {
   accountAssociation: {
     header: "eyJmaWQiOjE0NTEyMjgsInR5cGUiOiJhdXRoIiwia2V5IjoiMHhlZjVGRGVmNzg3QzJBMkFGRmRmNDgwMjU0Y2Y2MTQ3ZDNCZDBCQ0M2In0",
     payload: "eyJkb21haW4iOiJuZXctbWluaS1hcHAtcXVpY2tzdGFydC1vbWVnYS1uaW5lLnZlcmNlbC5hcHAifQ",
-    signature: "o21xykGx3xe8Yf4KdFcfeey9FvZn6tQtCrQ5YZeE9QoJTft84WBjSK62L8udaPHUe9tq+d5m8RlBSRniYl/FQxs="
+    signature: "e9yJApF6Nnu8wd5B7ZzJuPBjVpRWh1J5VdnsfHpYSBIQ1ME6ILGtkec8FOl304bPs81O2gp6yJFAn71qGZcCWhw="
   },
   miniapp: {
     version: "1",
@@ -32,5 +32,5 @@ export const minikitConfig = {
     ogDescription: "",
     ogImageUrl: `${ROOT_URL}/blue-hero.png`,
   },
-} as const;
+} as const; 
 
