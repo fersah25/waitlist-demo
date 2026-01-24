@@ -15,7 +15,7 @@ const sourceCodePro = Source_Code_Pro({
 });
 
 export async function generateMetadata(): Promise<Metadata> {
-  const appUrl = "https://new-mini-app-quickstart-omega-nine.vercel.app"; 
+  const appUrl = "waitlist-demo-eosin.vercel.app"; 
   
   const miniappConfig = {
     version: "next",
