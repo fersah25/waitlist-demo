@@ -7,19 +7,19 @@
   "frame": {
     "version": "1",
     "name": "fersahapp",
-    "iconUrl": "https://new-mini-app-quickstart-omega-nine.vercel.app/blue-icon.png",
-    "homeUrl": "https://new-mini-app-quickstart-omega-nine.vercel.app",
-    "imageUrl": "https://new-mini-app-quickstart-omega-nine.vercel.app/blue-icon.png",
+    "iconUrl": "waitlist-demo-eosin.vercel.app/blue-icon.png",
+    "homeUrl": "waitlist-demo-eosin.vercel.app",
+    "imageUrl": "waitlist-demo-eosin.vercel.app/blue-icon.png",
     "buttonTitle": "Launch fersahapp",
-    "splashImageUrl": "https://new-mini-app-quickstart-omega-nine.vercel.app/blue-icon.png",
+    "splashImageUrl": "waitlist-demo-eosin.vercel.app/blue-icon.png",
     "splashBackgroundColor": "#000000",
     "primaryCategory": "social",
     "tags": ["social", "ai", "ads"],
     "subtitle": "AI powered ad companion",
     "description": "fersahapp is the ultimate AI powered ad companion for the Farcaster ecosystem built on Base",
-    "heroImageUrl": "https://new-mini-app-quickstart-omega-nine.vercel.app/blue-icon.png",
+    "heroImageUrl": "waitlist-demo-eosin.vercel.app/blue-icon.png",
     "screenshotUrls": [
-      "https://new-mini-app-quickstart-omega-nine.vercel.app/blue-icon.png"
+      "waitlist-demo-eosin.vercel.app/blue-icon.png" 
     ]
   }
 } 
