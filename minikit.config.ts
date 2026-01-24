@@ -1,36 +1,39 @@
 const ROOT_URL =
   process.env.NEXT_PUBLIC_URL ||
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : 'http://localhost:3000');
+  (process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`) ||
+  "http://localhost:3000";
 
 /**
- * MiniApp configuration object. Must follow the Farcaster MiniApp specification.
+ * MiniApp configuration object. Must follow the mini app manifest specification.
  *
- * @see {@link https://miniapps.farcaster.xyz/docs/guides/publishing}
+ * @see {@link https://docs.base.org/mini-apps/features/manifest}
  */
 export const minikitConfig = {
   accountAssociation: {
-    header: "eyJmaWQiOjE0NTEyMjgsInR5cGUiOiJhdXRoIiwia2V5IjoiMHhlZjVGRGVmNzg3QzJBMkFGRmRmNDgwMjU0Y2Y2MTQ3ZDNCZDBCQ0M2In0",
-    payload: "eyJkb21haW4iOiJuZXctbWluaS1hcHAtcXVpY2tzdGFydC1vbWVnYS1uaW5lLnZlcmNlbC5hcHAifQ",
-    signature: "o21xykGx3xe8Yf4KdFcfeey9FvZn6tQtCrQ5YZeE9QoJTft84WBjSK62L8udaPHUe9tq+d5m8RlBSRniYl/FQxs="
+    header: "eyJmaWQiOjE0NTEyMjgsInR5cGUiOiJhdXRoIiwia2V5IjoiMHhlZjVGRGVmNzg3QzJBMkFGRmRmNDgwMjU0Y2Y2MTQ3ZDNCZDBCQ0M2In00",
+    payload: "eyJkb21haW4iOiJ3YWl0bGlzdC1kZW1vLWVvc2luLnZlcmNlbC5hcHAifQ",
+    signature: "e9yJApF6Nnu8wd5B7ZzJuPBjVpRWh1J5VdnsfHpYSBIQ1ME6ILGtkec8FOl304bPs81O2gp6yJFAn71qGZcCWhw=",
+  },
+  baseBuilder: {
+    ownerAddress: "",
   },
   miniapp: {
     version: "1",
-    name: "fersahapp", 
-    subtitle: "Your AI Ad Companion", 
-    description: "Ads",
-    screenshotUrls: [`${ROOT_URL}/screenshot-portrait.png`],
+    name: "fersahapp",
+    subtitle: "AI powered ad companion",
+    description: "fersahapp is the ultimate AI powered ad companion for the Farcaster ecosystem built on Base",
+    screenshotUrls: [`${ROOT_URL}/blue-icon.png`],
     iconUrl: `${ROOT_URL}/blue-icon.png`,
-    splashImageUrl: `${ROOT_URL}/blue-hero.png`,
+    splashImageUrl: `${ROOT_URL}/blue-icon.png`,
     splashBackgroundColor: "#000000",
     homeUrl: ROOT_URL,
     webhookUrl: `${ROOT_URL}/api/webhook`,
     primaryCategory: "social",
-    tags: ["marketing", "ads", "quickstart", "waitlist"],
-    heroImageUrl: `${ROOT_URL}/blue-hero.png`, 
-    tagline: "",
-    ogTitle: "",
-    ogDescription: "",
-    ogImageUrl: `${ROOT_URL}/blue-hero.png`,
+    tags: ["social", "ai", "ads"],
+    heroImageUrl: `${ROOT_URL}/blue-icon.png`,
+    tagline: "AI powered ad companion",
+    ogTitle: "fersahapp",
+    ogDescription: "fersahapp is the ultimate AI powered ad companion for the Farcaster ecosystem built on Base",
+    ogImageUrl: `${ROOT_URL}/blue-icon.png`,
   },
 } as const; 
-
