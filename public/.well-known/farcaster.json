@@ -1,8 +1,8 @@
 {
   "accountAssociation": {
-    "header": "eyJmaWQiOjE0NTEyMjgsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHgwZjlFMjNBNzJmMTNjYzNkZUUxNzUxODFGMTY1OWIxNjI4RjlFNjE2In0",
-    "payload": "eyJkb21haW4iOiJuZXctbWluaS1hcHAtcXVpY2tzdGFydC1vbWVnYS1uaW5lLnZlcmNlbC5hcHAifQ",
-    "signature": "o21xykGx3xe8Yf4KdFcfeey9FvZn6tQtCrQ5YZeE9QoJTft84WBjSK62L8udaPHUe9tq+d5m8RlBSRniYl/FQxs="
+    "header": "eyJmaWQiOjE0NTEyMjgsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHgwZjlFMjNBNzJmMTNjYzNkZUUxNzUxODFGMTY1OWIxNjI4RjlFNjE2In00",
+    "payload": "eyJkb21haW4iOiJ3YWl0bGlzdC1kZW1vLWVvc2luLnZlcmNlbC5hcHAifQ",
+    "signature": "fOQCVFAsM2xDUzhxjwiuSmzR4cnfoh4V+OOXROejWPsxDdXZFthjY5TSf/2Ib00/gcrqZ5dKOYuNkGKxj756hRs="
   },
   "frame": {
     "version": "1",
@@ -20,6 +20,6 @@
     "heroImageUrl": "waitlist-demo-eosin.vercel.app/blue-icon.png",
     "screenshotUrls": [
       "waitlist-demo-eosin.vercel.app/blue-icon.png" 
-    ]
+    ] 
   }
 } 
