@@ -2,126 +2,75 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+  background: #0a0a0a;
   color: white;
-  position: relative;
-  overflow: hidden;
-  font-family: sans-serif;
   align-items: center;
-  padding-top: 2rem;
+  padding-top: 1rem;
+  font-family: 'Inter', sans-serif;
 }
 
 .title {
-  font-size: 2.5rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  font-size: 2rem;
+  font-weight: 900;
+  color: #0052FF;
+  text-shadow: 0 0 15px rgba(0, 82, 255, 0.4);
   margin-bottom: 0.5rem;
-  background: linear-gradient(135deg, #ffffff 0%, #e0e0e0 100%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
 }
 
 .scoreDisplay {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #f7d954;
+  font-size: 1.2rem;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 5px 20px;
+  border-radius: 20px;
   margin-bottom: 1rem;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 0.5rem 1.5rem;
-  border-radius: 50px;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* OYUN ALANI */
 .gameBoard {
-  background: #000;
-  border: 4px solid #0052FF; /* Base Blue */
-  border-radius: 20px;
-  position: relative;
+  background: linear-gradient(to bottom, #1a1a2e, #16213e);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 15px;
   width: 300px;
-  height: 300px;
-  box-shadow: 0 0 40px rgba(0, 82, 255, 0.3);
+  height: 450px;
+  position: relative;
   overflow: hidden;
 }
 
 .canvas {
   display: block;
-  width: 100%;
-  height: 100%;
 }
 
-/* OYUN BİTTİ EKRANI */
+.controls {
+  display: flex;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.ctrlBtn {
+  background: #0052FF;
+  color: white;
+  border: none;
+  padding: 20px 40px;
+  border-radius: 15px;
+  font-weight: bold;
+  font-size: 1rem;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
 .gameOver {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 100%;
-  background: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(5px);
-  animation: fadeIn 0.5s ease;
 }
 
-.gameOver h2 {
-  color: #ff4d4d;
-  font-size: 2rem;
-  margin-bottom: 1.5rem;
-}
-
-/* KONTROL BUTONLARI */
-.controls {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  margin-top: 2rem;
-  width: 100%;
-}
-
-.row {
-  display: flex;
-  gap: 12px;
-}
-
-.ctrlBtn {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: white;
-  padding: 1.2rem;
-  border-radius: 15px;
-  font-weight: 800;
-  cursor: pointer;
-  min-width: 85px;
-  backdrop-filter: blur(10px);
-  transition: all 0.1s ease;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.ctrlBtn:active {
-  background: #f7d954;
-  color: black;
-  transform: scale(0.9);
-  border-color: #f7d954;
-}
-
-/* YENİDEN BAŞLAT BUTONU */
 .joinButton {
   background: #f7d954;
-  color: #000;
+  color: black;
   border: none;
-  padding: 0.8rem 2rem;
-  font-size: 1rem;
-  font-weight: 800;
-  border-radius: 10px;
+  padding: 10px 25px;
+  border-radius: 8px;
+  font-weight: bold;
   cursor: pointer;
-  text-transform: uppercase;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
 }
