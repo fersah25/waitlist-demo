@@ -3,14 +3,11 @@ import { useState, useEffect } from "react";
 import { useMiniKit } from "@coinbase/onchainkit/minikit";
 import { ConnectWallet, Wallet, WalletDropdown, WalletDropdownDisconnect } from "@coinbase/onchainkit/wallet";
 import { Address, Avatar, Name, Identity, EthBalance } from "@coinbase/onchainkit/identity";
-import { useRouter } from "next/navigation";
 import styles from "./page.module.css";
 
 export default function Home() {
   const { isFrameReady, setFrameReady, context } = useMiniKit();
-  const [email, setEmail] = useState("");
-  const [error, setError] = useState("");
-  const router = useRouter();
+  const [score, setScore] = useState(0);
 
   useEffect(() => {
     if (!isFrameReady) {
@@ -18,13 +15,8 @@ export default function Home() {
     }
   }, [isFrameReady, setFrameReady]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email || !email.includes("@")) {
-      setError("Please enter a valid email");
-      return;
-    }
-    router.push("/success");
+  const handleScoreClick = () => {
+    setScore(score + 1);
   };
 
   return (
@@ -47,21 +39,23 @@ export default function Home() {
 
       <div className={styles.content}>
         <div className={styles.waitlistForm}>
-          <h1 className={styles.title}>Join fersahapp</h1>
-          <p className={styles.subtitle}>Hey {context?.user?.displayName || "there"}, get early access.</p>
-          <form onSubmit={handleSubmit} className={styles.form}>
-            <input
-              type="email"
-              placeholder="Your email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={styles.emailInput}
-            />
-            {error && <p className="text-red-500 mt-2">{error}</p>}
-            <button type="submit" className={styles.joinButton}>JOIN WAITLIST</button>
-          </form>
+          <h1 className={styles.title}>Fersah Clicker</h1>
+          <p className={styles.subtitle}>Welcome, {context?.user?.displayName || "Player"}!</p>
+          
+          <div className={styles.scoreDisplay}>
+            <p className="text-sm uppercase tracking-widest opacity-70">Total Clicks</p>
+            <h2 className={styles.scoreNumber}>{score}</h2>
+          </div>
+
+          <button onClick={handleScoreClick} className={styles.joinButton}>
+            🖱️ CLICK ME!
+          </button>
+          
+          <p className="mt-6 text-xs opacity-50 uppercase tracking-widest">
+            Tap to dominate the Base network
+          </p>
         </div>
       </div>
     </div>
   );
-} 
+}
