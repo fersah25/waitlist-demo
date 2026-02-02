@@ -3,6 +3,15 @@ import { useState, useEffect, useRef } from "react";
 import { useMiniKit } from "@coinbase/onchainkit/minikit";
 import styles from "./page.module.css";
 
+// TypeScript için platform yapısını tanımlıyoruz (Hata vermemesi için şart)
+interface Platform {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  isRamp: boolean;
+}
+
 export default function BaseJump() {
   const { isFrameReady, setFrameReady } = useMiniKit();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -11,20 +20,24 @@ export default function BaseJump() {
   const [gameOver, setGameOver] = useState(false);
   const [color, setColor] = useState("#0052FF");
 
-  // Oyunun değişkenlerini React render döngüsünden ayırıyoruz
   const game = useRef({
-    player: { x: 135, y: 350, w: 30, h: 30, dy: 0, speed: 8 },
-    platforms: [] as any[],
-    gravity: 0.3,
-    jump: -9,
-    rampJump: -18,
+    player: { x: 135, y: 350, w: 30, h: 30, dy: 0 },
+    platforms: [] as Platform[],
+    gravity: 0.35,
+    jump: -10,
+    rampJump: -20,
     isInitial: true
   });
 
   const colors = ["#0052FF", "#f7d954", "#ff4d4d", "#00ff88", "#ff00ff"];
 
   useEffect(() => {
-    if (!isFrameReady) setFrameReady();
+    if (!isFrameReady) {
+      setFrameReady();
+    }
+  }, [isFrameReady, setFrameReady]);
+
+  useEffect(() => {
     if (gameOver) return;
 
     const canvas = canvasRef.current;
@@ -32,11 +45,10 @@ export default function BaseJump() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Platformları sadece bir kez oluştur
     if (game.current.isInitial) {
-      game.current.platforms = [];
+      const initialPlatforms: Platform[] = [];
       for (let i = 0; i < 7; i++) {
-        game.current.platforms.push({
+        initialPlatforms.push({
           x: Math.random() * 240,
           y: i * 70 + 50,
           w: 60,
@@ -44,6 +56,7 @@ export default function BaseJump() {
           isRamp: Math.random() > 0.85
         });
       }
+      game.current.platforms = initialPlatforms;
       game.current.isInitial = false;
     }
 
@@ -53,11 +66,9 @@ export default function BaseJump() {
       const g = game.current;
       const p = g.player;
 
-      // Hareket
       p.dy += g.gravity;
       p.y += p.dy;
 
-      // Platform Çarpışma (Sadece düşerken)
       if (p.dy > 0) {
         g.platforms.forEach(plat => {
           if (
@@ -67,13 +78,12 @@ export default function BaseJump() {
             p.y + p.h < plat.y + plat.h + 10
           ) {
             p.dy = plat.isRamp ? g.rampJump : g.jump;
-            p.y = plat.y - p.h; // Üstünde kalmasını sağla
+            p.y = plat.y - p.h;
             setColor(colors[Math.floor(Math.random() * colors.length)]);
           }
         });
       }
 
-      // Kamera Kaydırma ve Yeni Platformlar
       if (p.y < 200) {
         const offset = 200 - p.y;
         p.y = 200;
@@ -88,21 +98,19 @@ export default function BaseJump() {
         });
       }
 
-      // Düşme Kontrolü
       if (p.y > 450) {
         if (lives > 1) {
           setLives(l => l - 1);
           p.y = 150;
           p.dy = 0;
         } else {
+          setLives(0);
           setGameOver(true);
         }
       }
 
-      // Çizim
       ctx.clearRect(0, 0, 300, 450);
 
-      // Platform Çizimi
       g.platforms.forEach(plat => {
         ctx.fillStyle = plat.isRamp ? "#ff00ff" : "#f7d954";
         ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
@@ -112,14 +120,13 @@ export default function BaseJump() {
         }
       });
 
-      // Karakter Çizimi
       ctx.fillStyle = color;
       ctx.fillRect(p.x, p.y, p.w, p.h);
 
       animationId = requestAnimationFrame(update);
     };
 
-    animationId = requestAnimationFrame(update);
+    update();
     return () => cancelAnimationFrame(animationId);
   }, [gameOver, lives, color]);
 
