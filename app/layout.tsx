@@ -21,6 +21,20 @@ export async function generateMetadata(): Promise<Metadata> {
           },
         },
       }),
+      "fc:frame": JSON.stringify({
+        version: "next",
+        imageUrl: minikitConfig.miniapp.heroImageUrl,
+        button: {
+          title: "Check Trust Score",
+          action: {
+            type: "launch_frame",
+            name: minikitConfig.miniapp.name,
+            url: minikitConfig.miniapp.homeUrl,
+            splashImageUrl: minikitConfig.miniapp.splashImageUrl,
+            splashBackgroundColor: minikitConfig.miniapp.splashBackgroundColor,
+          },
+        },
+      }),
     },
   };
 }
