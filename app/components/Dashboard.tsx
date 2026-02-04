@@ -15,7 +15,34 @@ import {
     WalletDropdownBasename,
     WalletDropdownLink
 } from '@coinbase/onchainkit/wallet';
+import {
+    Swap,
+    SwapAmountInput,
+    SwapToggleButton,
+    SwapButton,
+    SwapMessage,
+    SwapToast
+} from '@coinbase/onchainkit/swap';
+import { Token } from '@coinbase/onchainkit/token';
 import styles from "../page.module.css";
+
+const ethtoken: Token[] = [{
+    name: 'ETH',
+    address: '',
+    symbol: 'ETH',
+    decimals: 18,
+    image: 'https://wallet-api-production.s3.amazonaws.com/uploads/tokens/eth_288.png',
+    chainId: 8453,
+}];
+
+const usdctoken: Token[] = [{
+    name: 'USDC',
+    address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    symbol: 'USDC',
+    decimals: 6,
+    image: 'https://d3r81g40ycuhqg.cloudfront.net/wallet/wais/44/2b/442b80bd16af0c0d9b22e03a16753823fe826e5bfd457292b55fa0ba8c1ba213-ZWUzYjJmZGUtMDYxNy00NDcyLTg0NjQtMWI4OGEwYjBiODE2',
+    chainId: 8453,
+}];
 
 // This component contains all the client-side logic
 export default function Dashboard() {
@@ -120,6 +147,28 @@ export default function Dashboard() {
                         >
                             Share My Score on Warpcast
                         </button>
+
+                        <div className={styles.swapContainer}>
+                            <h3 className={styles.swapTitle}>Quick Swap</h3>
+                            <Swap>
+                                <SwapAmountInput
+                                    label="Sell"
+                                    swappableTokens={ethtoken}
+                                    token={ethtoken[0]}
+                                    type="from"
+                                />
+                                <SwapToggleButton />
+                                <SwapAmountInput
+                                    label="Buy"
+                                    swappableTokens={usdctoken}
+                                    token={usdctoken[0]}
+                                    type="to"
+                                />
+                                <SwapButton />
+                                <SwapMessage />
+                                <SwapToast />
+                            </Swap>
+                        </div>
                     </>
                 )}
 
