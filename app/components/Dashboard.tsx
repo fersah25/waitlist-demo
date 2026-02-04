@@ -7,6 +7,10 @@ import {
     Name,
     Address
 } from "@coinbase/onchainkit/identity";
+import {
+    ConnectWallet,
+    Wallet
+} from '@coinbase/onchainkit/wallet';
 import styles from "../page.module.css";
 
 // This component contains all the client-side logic
@@ -70,7 +74,9 @@ export default function Dashboard() {
                                 <div className={styles.scoreLabel}>Trust Score</div>
                             </>
                         ) : (
-                            <div className={styles.scoreLabel}>Connect Wallet</div>
+                            <Wallet>
+                                <ConnectWallet className={styles.connectWalletButton} />
+                            </Wallet>
                         )}
                     </div>
                 </div>
