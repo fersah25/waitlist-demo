@@ -7,6 +7,7 @@ import {
     Name,
     Address
 } from "@coinbase/onchainkit/identity";
+import sdk from '@farcaster/frame-sdk';
 import {
     ConnectWallet,
     Wallet,
@@ -55,6 +56,11 @@ export default function Dashboard() {
     const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
+        // Signal to Farcaster that the frame is ready
+        if (sdk && sdk.actions) {
+            sdk.actions.ready();
+        }
+
         if (isConnected && address) {
             setIsLoading(true);
 
