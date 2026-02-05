@@ -102,7 +102,8 @@ export default function BaseNinja() {
         // Weighted Random
         const rand = Math.random() * 100;
         let cumulative = 0;
-        let selected = ORB_TYPES[0];
+        let selected: typeof ORB_TYPES[number] = ORB_TYPES[0];
+
         for (const t of ORB_TYPES) {
             cumulative += t.weight;
             if (rand <= cumulative) {
@@ -218,7 +219,6 @@ export default function BaseNinja() {
         return () => window.removeEventListener('resize', resize);
     }, []);
 
-    // --- Game Loop ---
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -226,6 +226,15 @@ export default function BaseNinja() {
         if (!ctx) return;
 
         let frameId: number;
+        // Capture timeLeft for usage inside loop if needed, but the loop relies on refs mostly.
+        // Actually, the loop uses timeRef which is a ref.
+        // The issue is likely `gameState` or `timeLeft` in the dependency array if used.
+        // But `timeLeft` state is updated inside loop? No, `timeRef` is used.
+        // `timeLeft` state is purely for render.
+        // The loop is safely dependent on `gameState` to restart.
+
+        // Let's suppress the warning or ensure dependencies are correct. 
+        // Logic seems to rely on refs, so it's fine.
 
         const loop = (time: number) => {
             if (gameState !== 'playing') return;
@@ -520,7 +529,7 @@ export default function BaseNinja() {
                     background: 'rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 20,
                     backdropFilter: 'blur(10px)'
                 }}>
-                    <h2 style={{ fontSize: '3rem', color: '#fff', marginBottom: 10 }}>TIME'S UP!</h2>
+                    <h2 style={{ fontSize: '3rem', color: '#fff', marginBottom: 10 }}>TIME&apos;S UP!</h2>
                     <p style={{ fontSize: '1.5rem', color: '#aaa', marginBottom: 30 }}>Final Score: <span style={{ color: '#0052FF', fontWeight: 'bold' }}>{score}</span></p>
                     <button
                         onClick={restartGame}
