@@ -23,8 +23,7 @@ interface Orb {
 export default function BaseNinja() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [score, setScore] = useState(0);
-    const [gameOver, setGameOver] = useState(false);
-
+    const [gameOver] = useState(false);
     // Game State Refs (to avoid closures in animation loop)
     const orbs = useRef<Orb[]>([]);
     const trail = useRef<Point[]>([]);
