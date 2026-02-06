@@ -42,31 +42,63 @@ export default function BaseRunner() {
     const spawnTimer = useRef(0);
 
     // --- Helpers ---
-    const getLaneX = (lane: number) => {
-        // Lanes are 0, 1, 2. 
-        // 0 -> 1/6, 1 -> 3/6 (0.5), 2 -> 5/6
-        return (lane * 2 + 1) / (LANE_COUNT * 2);
+    // Helper to get the X coordinate of a specific lane line (0..LANE_COUNT) at a given Y
+    // y is screen coordinate.
+    const getLineX = (lineIndex: number, y: number, w: number, h: number) => {
+        const horizon = h * 0.3;
+        if (y < horizon) return w / 2;
+
+        const progress = (y - horizon) / (h - horizon);
+
+        // Line bottom X (0 to w based on ratio)
+        const xBottom = (lineIndex / LANE_COUNT) * w;
+
+        // Line top X (Vanishing point with convergence)
+        // Convergence 0.1 means top width is 10% of bottom width
+        const xTop = w / 2 + (xBottom - w / 2) * 0.1;
+
+        return xTop + (xBottom - xTop) * progress;
+    };
+
+    const getLaneCenterX = (laneIndex: number, y: number, w: number, h: number) => {
+        // Support fractional lanes for player lerping
+        // We can interpolate between the "lines" of the floor(laneIndex) and ceil(laneIndex) + 1?
+        // Actually simplest is: Center of Lane L is average of Line L and Line L+1.
+        // For fractional lane L (e.g. 1.5), we can just interp between Center(1) and Center(2).
+
+        // Let's just calculate the two boundary lines for this "lane"
+        // If laneIndex is 0.5, it means we are halfway between lane 0 and 1.
+        // Actually, let's keep it consistent with the visual logic.
+        // A "lane" is the space between line i and line i+1.
+        // Center of logical lane i is (Line(i) + Line(i+1)) / 2
+
+        // Since getLineX is linear with respect to lineIndex (due to linear lerps),
+        // we can just pass (laneIndex + 0.5) to a hypothetical getLineX logic?
+        // Let's verify:
+        // getLineX(i) = Lerp(Top(i), Bot(i), p)
+        // Top(i) is linear with i? Yes: w/2 + (i/N*w - w/2)*0.1 -> A + i*B
+        // Bot(i) is linear with i? Yes: i/N*w
+
+        // So yes, perfectly safe to just calculate "Line X" at index (laneIndex + 0.5)
+        return getLineX(laneIndex + 0.5, y, w, h);
     };
 
     const spawnEntity = () => {
         const lane = Math.floor(Math.random() * LANE_COUNT);
-        const type = Math.random() > 0.3 ? 'obstacle' : 'coin'; // 70% obstacles
-
-        // Prevent stacking? Simple logic: just push.
-        // Check collision with recent spawns to match lane?
-        // Basic version: Just spawn.
+        const type = Math.random() > 0.3 ? 'obstacle' : 'coin';
 
         entities.current.push({
             id: Date.now() + Math.random(),
             lane,
-            y: -100, // Spawn above screen perspective
+            y: -100,
             type
         });
     };
 
     const restartGame = () => {
         playerLane.current = 1;
-        playerX.current = 0.5;
+        // playerX is now just the physical lane index lerped, we will use that for calculation
+        playerX.current = 1;
         speed.current = BASE_SPEED;
         scoreRef.current = 0;
         entities.current = [];
@@ -76,20 +108,26 @@ export default function BaseRunner() {
     };
 
     // --- Interaction ---
-    const handleInput = (x: number, width: number) => {
+    const moveLeft = () => {
         if (gameState !== 'playing') return;
-
-        if (x < width / 2) {
-            // Left
-            playerLane.current = Math.max(0, playerLane.current - 1);
-        } else {
-            // Right
-            playerLane.current = Math.min(LANE_COUNT - 1, playerLane.current + 1);
-        }
+        playerLane.current = Math.max(0, playerLane.current - 1);
     };
 
-    const handleTouch = (e: React.TouchEvent) => handleInput(e.touches[0].clientX, window.innerWidth);
-    const handleClick = (e: React.MouseEvent) => handleInput(e.clientX, window.innerWidth);
+    const moveRight = () => {
+        if (gameState !== 'playing') return;
+        playerLane.current = Math.min(LANE_COUNT - 1, playerLane.current + 1);
+    };
+
+    const handleTouch = (e: React.TouchEvent) => {
+        const x = e.touches[0].clientX;
+        if (x < window.innerWidth / 2) moveLeft();
+        else moveRight();
+    };
+    const handleClick = (e: React.MouseEvent) => {
+        const x = e.clientX;
+        if (x < window.innerWidth / 2) moveLeft();
+        else moveRight();
+    };
 
     // --- Init ---
     useEffect(() => {
@@ -103,8 +141,20 @@ export default function BaseRunner() {
         };
         window.addEventListener('resize', resize);
         resize();
-        return () => window.removeEventListener('resize', resize);
-    }, []);
+
+        // Keyboard Logic
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const k = e.key.toLowerCase();
+            if (k === 'arrowleft' || k === 'a') moveLeft();
+            if (k === 'arrowright' || k === 'd') moveRight();
+        };
+        window.addEventListener('keydown', handleKeyDown);
+
+        return () => {
+            window.removeEventListener('resize', resize);
+            window.removeEventListener('keydown', handleKeyDown);
+        }
+    }, [gameState]);
 
     // --- Loop ---
     useEffect(() => {
@@ -123,62 +173,51 @@ export default function BaseRunner() {
 
             // Speed Scaling
             speed.current = Math.min(MAX_SPEED, speed.current + SPEED_INC);
-            scoreRef.current += speed.current * 0.05; // Distance score
+            // Distance Score REMOVED as per request. Only coins count.
 
-            // Sync Display Score
             // Sync Display Score
             const currentScore = Math.floor(scoreRef.current);
             setScore(prev => (currentScore > prev ? currentScore : prev));
 
             // Spawning
             spawnTimer.current += dt;
-            const spawnRate = 10000 / speed.current; // Faster spawn as speed increases
+            const spawnRate = 10000 / speed.current;
             if (spawnTimer.current > spawnRate) {
                 spawnEntity();
                 spawnTimer.current = 0;
             }
 
-            // Player Pos Interpolation
-            const targetX = getLaneX(playerLane.current);
-            playerX.current += (targetX - playerX.current) * LANE_SWITCH_SPEED;
+            // Player Lane Interpolation (Lerp the integer lane index)
+            // Normalized speed independent of frame rate would be better but simple lerp works for now
+            playerX.current += (playerLane.current - playerX.current) * LANE_SWITCH_SPEED;
 
             // Clear
             ctx.fillStyle = COLOR_BG;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // --- Draw Road (Retro Perspective) ---
+            // --- Draw Road ---
             const w = canvas.width;
             const h = canvas.height;
-            const horizon = h * 0.3; // Horizon line
+            const horizon = h * 0.3;
 
-            // Grid Lines (Vertical)
+            // Grid Lines
             ctx.strokeStyle = COLOR_GRID;
             ctx.lineWidth = 2;
             ctx.shadowBlur = 10;
             ctx.shadowColor = COLOR_GRID;
 
             ctx.beginPath();
-            // Draw main 4 lines defining 3 lanes
             for (let i = 0; i <= LANE_COUNT; i++) {
-                // Determine x at bottom
-                const xBottom = (i / LANE_COUNT) * w;
-                // Determine x at horizon (vanishing point is w/2)
-                // Actually, let's make vanishing point w/2, horizon y
-                const xTop = w / 2 + (xBottom - w / 2) * 0.1; // Converge
+                const xBottom = getLineX(i, h, w, h);
+                const xTop = getLineX(i, horizon, w, h);
 
                 ctx.moveTo(xBottom, h);
                 ctx.lineTo(xTop, horizon);
             }
             ctx.stroke();
 
-            // Horizontal Moving Lines
+            // Horizontal Lines
             const offset = (Date.now() * speed.current * 0.5) % 100;
-            // Draw lines coming towards us
-            // Z-space mapping: y = screenY
-            // Simple approach: Linear lines moving down? No, exponential for perspective.
-            // Let's just do linear lines for retro feel or simplified.
-            // Actually, `y = h / z` projection.
-            // Simplified:
             ctx.lineWidth = 1;
             ctx.globalAlpha = 0.5;
             for (let i = 0; i < h; i += 40) {
@@ -193,66 +232,46 @@ export default function BaseRunner() {
 
 
             // --- Entities ---
-            // Sort by Y to draw back-to-front? Yes.
-            // Actually entity.y IS Z-position in a 3D sense? 
-            // In typical runner logic: Y moves 0 -> max. 
-            // Here let's say Y is screen Y to keep it simple 2.5D.
-            // Horizon is Y=0 for logic, but rendered at `horizon` var.
-            // Let's stick to: Spawn at horizon, move down to h.
-
             for (let i = entities.current.length - 1; i >= 0; i--) {
                 const ent = entities.current[i];
 
-                // Move
-                if (ent.y === -100) ent.y = horizon; // Init
+                if (ent.y === -100) ent.y = horizon;
 
-                // Perspective Scale
-                // As Y goes from horizon to h, scale goes 0.1 to 1.0
                 const progress = (ent.y - horizon) / (h - horizon);
                 const scale = 0.1 + (progress * 0.9);
-                const moveSpeed = speed.current * scale; // Move faster as closer
-
+                const moveSpeed = speed.current * scale;
                 ent.y += moveSpeed;
 
-                // X position based on Lane lines
-                // xBottom and xTop were unused. Removed.
-                // Lerp based on progress
-                // Actually we used lines: xTop to xBottom. 
-                // Lane Center at bottom:
-                const laneCenterBottom = ((ent.lane * 2 + 1) / (LANE_COUNT * 2)) * w;
-                // Lane Center at top:
-                const laneCenterTop = w / 2 + (laneCenterBottom - w / 2) * 0.1;
-
-                const currentX = laneCenterTop + (laneCenterBottom - laneCenterTop) * progress;
+                // Use Helper for X
+                const currentX = getLaneCenterX(ent.lane, ent.y, w, h);
                 const size = 60 * scale;
 
                 // Collision
-                // Player is at Y ~ h - 100.
                 const playerScreenY = h - 100;
-                const hitDist = 40;
+                const hitDist = 40; // Generous hit box
 
                 if (Math.abs(ent.y - playerScreenY) < hitDist) {
-                    // Check Grid X
-                    // Approximate player X
-                    const pX = playerX.current * w;
+                    // Calculate Player X at this Y-plane
+                    // We use playerX.current which is looking at the 'lane index' (0-2 float)
+                    // We need to convert that lane index to an X position AT the player's Y (h-100)
+
+                    const pX = getLaneCenterX(playerX.current, playerScreenY, w, h);
+
                     if (Math.abs(currentX - pX) < hitDist) {
                         if (ent.type === 'obstacle') {
                             setGameState('gameover');
                         } else if (ent.type === 'coin' && !ent.collected) {
                             ent.collected = true;
                             scoreRef.current += 100;
-                            // particle effect?
                         }
                     }
                 }
 
-                // Draw
                 if (ent.collected) continue;
 
                 if (ent.type === 'obstacle') {
                     ctx.fillStyle = COLOR_OBSTACLE;
                     ctx.fillRect(currentX - size / 2, ent.y - size / 2, size, size);
-                    // Glow
                     ctx.shadowColor = COLOR_OBSTACLE;
                     ctx.shadowBlur = 10;
                     ctx.strokeRect(currentX - size / 2, ent.y - size / 2, size, size);
@@ -268,29 +287,24 @@ export default function BaseRunner() {
                 }
                 ctx.shadowBlur = 0;
 
-                // Remove
-                if (ent.y > h + 50) {
-                    entities.current.splice(i, 1);
-                }
+                if (ent.y > h + 50) entities.current.splice(i, 1);
             }
 
             // --- Draw Player ---
-            const pX = playerX.current * w;
-            const pY = h - 100;
+            const playerScreenY = h - 100;
+            const pX = getLaneCenterX(playerX.current, playerScreenY, w, h);
             const pSize = 50;
 
-            // Base Logo (Blue Circle)
             ctx.beginPath();
-            ctx.arc(pX, pY, pSize / 2, 0, Math.PI * 2);
+            ctx.arc(pX, playerScreenY, pSize / 2, 0, Math.PI * 2);
             ctx.fillStyle = COLOR_PLAYER;
             ctx.fill();
             ctx.lineWidth = 4;
             ctx.strokeStyle = '#fff';
             ctx.stroke();
 
-            // Inner
             ctx.beginPath();
-            ctx.arc(pX, pY, pSize * 0.3, 0, Math.PI * 2);
+            ctx.arc(pX, playerScreenY, pSize * 0.3, 0, Math.PI * 2);
             ctx.fillStyle = '#fff';
             ctx.fill();
 
