@@ -1,7 +1,7 @@
 "use client";
 import React, { useRef, useEffect, useState } from "react";
 import sdk from '@farcaster/frame-sdk';
-import styles from "../page.module.css";
+// import styles from "../page.module.css"; // Removing CSS Module
 
 // --- Constants ---
 const LANE_COUNT = 3;
@@ -126,9 +126,9 @@ export default function BaseRunner() {
             scoreRef.current += speed.current * 0.05; // Distance score
 
             // Sync Display Score
-            if (Math.floor(scoreRef.current) > score) {
-                setScore(Math.floor(scoreRef.current));
-            }
+            // Sync Display Score
+            const currentScore = Math.floor(scoreRef.current);
+            setScore(prev => (currentScore > prev ? currentScore : prev));
 
             // Spawning
             spawnTimer.current += dt;
@@ -215,8 +215,7 @@ export default function BaseRunner() {
                 ent.y += moveSpeed;
 
                 // X position based on Lane lines
-                const xBottom = (ent.lane / LANE_COUNT) * w + (w / LANE_COUNT / 2);
-                const xTop = w / 2; // Vanishing point
+                // xBottom and xTop were unused. Removed.
                 // Lerp based on progress
                 // Actually we used lines: xTop to xBottom. 
                 // Lane Center at bottom:
@@ -303,7 +302,16 @@ export default function BaseRunner() {
     }, [gameState]);
 
     return (
-        <div className={styles.container} style={{ overflow: 'hidden', touchAction: 'none', position: 'relative', background: 'black' }}>
+        <div style={{
+            overflow: 'hidden',
+            touchAction: 'none',
+            position: 'relative',
+            background: 'black',
+            width: '100vw',
+            height: '100vh',
+            display: 'flex',
+            flexDirection: 'column'
+        }}>
             {/* HUD */}
             <div style={{ position: 'absolute', top: 30, width: '100%', textAlign: 'center', zIndex: 10, pointerEvents: 'none' }}>
                 <h1 style={{ fontSize: '3rem', fontWeight: 900, color: 'white', textShadow: '0 0 10px #00F0FF', margin: 0 }}>{score}</h1>
