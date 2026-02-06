@@ -8,14 +8,18 @@ const LANE_COUNT = 3;
 const BASE_SPEED = 5;
 const MAX_SPEED = 15;
 const SPEED_INC = 0.005;
-const LANE_SWITCH_SPEED = 0.2; // Lerp factor
+const LANE_SWITCH_SPEED = 0.15; // Smoother
+const GRAVITY = 0.6;
+const JUMP_FORCE = -14; // Increased jump power slightly
+const GROUND_Y = 0;
 
 // Colors
-const COLOR_BG = '#000000';
+const COLOR_BG = '#050510'; // Darker, bluish black
 const COLOR_GRID = '#00F0FF';
 const COLOR_PLAYER = '#0052FF';
 const COLOR_OBSTACLE = '#FF0420';
-const COLOR_COIN = '#627EEA'; // ETH Blue/Goldish
+const COLOR_COIN = '#FFD700'; // Gold for Coins
+const COLOR_KRYPTON = '#1eff00'; // Kryptonite Green
 
 interface Entity {
     id: number;
@@ -23,6 +27,27 @@ interface Entity {
     y: number;
     type: 'obstacle' | 'coin';
     collected?: boolean;
+    // content type for obstacles
+    subType?: 'ground' | 'air';
+}
+
+interface Particle {
+    id: number;
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    life: number;
+    color: string;
+}
+
+interface FloatingText {
+    id: number;
+    text: string;
+    x: number;
+    y: number;
+    life: number;
+    opacity: number;
 }
 
 export default function BaseRunner() {
@@ -34,10 +59,19 @@ export default function BaseRunner() {
 
     // Logic Refs
     const playerLane = useRef(1); // Start Middle
-    const playerX = useRef(0.5); // 0.0 to 1.0 (relative to road width)
+    const playerX = useRef(1); // Visual X-lane coordinate (0.0 - 2.0)
+
+    // Physics Refs
+    const playerY = useRef(0); // Height from ground (0 is ground)
+    const playerVy = useRef(0);
+    const isDucking = useRef(false);
+
     const speed = useRef(BASE_SPEED);
     const scoreRef = useRef(0);
     const entities = useRef<Entity[]>([]);
+    const particles = useRef<Particle[]>([]);
+    const floatTexts = useRef<FloatingText[]>([]);
+
     const lastTime = useRef(0);
     const spawnTimer = useRef(0);
 
@@ -53,9 +87,14 @@ export default function BaseRunner() {
         // Line bottom X (0 to w based on ratio)
         const xBottom = (lineIndex / LANE_COUNT) * w;
 
+        // Dynamic Perspective (Warp Speed)
+        // As speed increases, widen the FOV (increase convergence factor)
+        // Base 0.1, max 0.3
+        const speedRatio = (speed.current - BASE_SPEED) / (MAX_SPEED - BASE_SPEED);
+        const convergence = 0.1 + Math.max(0, speedRatio) * 0.15;
+
         // Line top X (Vanishing point with convergence)
-        // Convergence 0.1 means top width is 10% of bottom width
-        const xTop = w / 2 + (xBottom - w / 2) * 0.1;
+        const xTop = w / 2 + (xBottom - w / 2) * convergence;
 
         return xTop + (xBottom - xTop) * progress;
     };
@@ -85,23 +124,40 @@ export default function BaseRunner() {
 
     const spawnEntity = () => {
         const lane = Math.floor(Math.random() * LANE_COUNT);
-        const type = Math.random() > 0.3 ? 'obstacle' : 'coin';
+        const typeRand = Math.random();
+
+        let type: 'obstacle' | 'coin' = 'coin';
+        let subType: 'ground' | 'air' | undefined = undefined;
+
+        if (typeRand > 0.6) {
+            type = 'obstacle';
+            // 50% chance of High Obstacle (Laser) vs Low Obstacle (Box)
+            subType = Math.random() > 0.5 ? 'air' : 'ground';
+        }
 
         entities.current.push({
             id: Date.now() + Math.random(),
             lane,
             y: -100,
-            type
+            type,
+            subType
         });
     };
 
     const restartGame = () => {
         playerLane.current = 1;
         // playerX is now just the physical lane index lerped, we will use that for calculation
+        // playerX is now just the physical lane index lerped
         playerX.current = 1;
+        playerY.current = 0;
+        playerVy.current = 0;
+        isDucking.current = false;
+
         speed.current = BASE_SPEED;
         scoreRef.current = 0;
         entities.current = [];
+        particles.current = [];
+        floatTexts.current = [];
         setScore(0);
         setGameState('playing');
         lastTime.current = performance.now();
@@ -147,12 +203,30 @@ export default function BaseRunner() {
             const k = e.key.toLowerCase();
             if (k === 'arrowleft' || k === 'a') moveLeft();
             if (k === 'arrowright' || k === 'd') moveRight();
+            if (k === 'arrowup' || k === 'w' || k === ' ') {
+                if (playerY.current === 0) {
+                    playerVy.current = JUMP_FORCE;
+                }
+            }
+            if (k === 'arrowdown' || k === 's') {
+                isDucking.current = true;
+            }
         };
+
+        const handleKeyUp = (e: KeyboardEvent) => {
+            const k = e.key.toLowerCase();
+            if (k === 'arrowdown' || k === 's') {
+                isDucking.current = false;
+            }
+        }
+
         window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
 
         return () => {
             window.removeEventListener('resize', resize);
             window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keyup', handleKeyUp);
         }
     }, [gameState]);
 
@@ -172,7 +246,12 @@ export default function BaseRunner() {
             lastTime.current = time;
 
             // Speed Scaling
-            speed.current = Math.min(MAX_SPEED, speed.current + SPEED_INC);
+            // Dynamic MAX_SPEED based on score
+            // Every 500 points, increase cap by 2
+            const scoreMilestone = Math.floor(scoreRef.current / 500);
+            const dynamicMax = MAX_SPEED + (scoreMilestone * 2);
+
+            speed.current = Math.min(dynamicMax, speed.current + SPEED_INC);
             // Distance Score REMOVED as per request. Only coins count.
 
             // Sync Display Score
@@ -187,24 +266,68 @@ export default function BaseRunner() {
                 spawnTimer.current = 0;
             }
 
-            // Player Lane Interpolation (Lerp the integer lane index)
-            // Normalized speed independent of frame rate would be better but simple lerp works for now
+            // Physics
+            if (playerY.current > 0 || playerVy.current !== 0) {
+                playerY.current += playerVy.current;
+                playerVy.current += GRAVITY;
+                if (playerY.current > 0) {
+                    playerY.current = 0;
+                    playerVy.current = 0;
+                }
+            }
+            // Cap height so we don't fly forever if gravity fails
+            // (Negative Y is up in standard canvas? No, we will treat Y as height from ground, so +Y is up, need to invert for rendering)
+            // Wait, we'll maintain playerY as positive UP. 
+            if (playerY.current < -200) playerY.current = -200; // Cap ceiling 
+
+
+            // Player Lane Interpolation
             playerX.current += (playerLane.current - playerX.current) * LANE_SWITCH_SPEED;
 
             // Clear
             ctx.fillStyle = COLOR_BG;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // --- Draw Road ---
+            // --- Draw Visuals ---
             const w = canvas.width;
             const h = canvas.height;
             const horizon = h * 0.3;
+
+            // Retro Sun / Glow
+            const gradient = ctx.createLinearGradient(0, horizon - 50, 0, horizon + 100);
+            gradient.addColorStop(0, '#00F0FF00');
+            gradient.addColorStop(0.5, '#00F0FF44'); // Glow color
+            gradient.addColorStop(1, '#00F0FF00');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, horizon - 50, w, 150);
+
+            // Neon Pillars (Scrolling Env)
+            const pillarOffset = (Date.now() * speed.current * 0.2) % 200;
+            ctx.fillStyle = '#111';
+            ctx.shadowBlur = 0;
+            // Draw simple vertical "buildings" on sides
+            for (let i = -200; i < h; i += 150) {
+                const py = i + pillarOffset;
+                // Left
+                if (py > horizon) {
+                    const depth = (py - horizon) / (h - horizon);
+                    const pW = 10 + 40 * depth;
+                    const pX = getLineX(-1, py, w, h) - pW * 2;
+                    ctx.fillStyle = `rgba(0, 40, 80, ${depth})`;
+                    ctx.fillRect(pX, py, pW, 100 * depth);
+                    // Right
+                    const pXR = getLineX(LANE_COUNT + 1, py, w, h) + pW;
+                    ctx.fillRect(pXR, py, pW, 100 * depth);
+                }
+            }
+
 
             // Grid Lines
             ctx.strokeStyle = COLOR_GRID;
             ctx.lineWidth = 2;
             ctx.shadowBlur = 10;
             ctx.shadowColor = COLOR_GRID;
+            ctx.globalAlpha = 0.6; // Softer grid
 
             ctx.beginPath();
             for (let i = 0; i <= LANE_COUNT; i++) {
@@ -215,6 +338,7 @@ export default function BaseRunner() {
                 ctx.lineTo(xTop, horizon);
             }
             ctx.stroke();
+            ctx.globalAlpha = 1.0;
 
             // Horizontal Lines
             const offset = (Date.now() * speed.current * 0.5) % 100;
@@ -242,47 +366,123 @@ export default function BaseRunner() {
                 const moveSpeed = speed.current * scale;
                 ent.y += moveSpeed;
 
-                // Use Helper for X
                 const currentX = getLaneCenterX(ent.lane, ent.y, w, h);
                 const size = 60 * scale;
 
                 // Collision
                 const playerScreenY = h - 100;
-                const hitDist = 40; // Generous hit box
+                // Since our playerY is "height from ground" (negative is UP in canvas coords? Wait.)
+                // Let's define: playerVisualY = playerScreenY + playerY.current
+                // playerY.current starts at 0 and goes NEGATIVE for jump? JUMP_FORCE = -12. Gravity = 0.6.
+                // Yes, typically in Canvas Y+ is down. So Jump Force -12 means move UP. 
+                // So (0 is ground), (-100 is air).
 
-                if (Math.abs(ent.y - playerScreenY) < hitDist) {
-                    // Calculate Player X at this Y-plane
-                    // We use playerX.current which is looking at the 'lane index' (0-2 float)
-                    // We need to convert that lane index to an X position AT the player's Y (h-100)
+                const pVisualY = playerScreenY + playerY.current;
 
+                // Hit Logic
+                // Z-collision (Y-axis on screen)
+                // If entity is within a certain depth range of the player
+                const hitZone = 30; // Depth tolerance
+                const inHitZone = Math.abs(ent.y - playerScreenY) < hitZone; // Check against GROUND Y for consistency of lane arrival
+
+                if (inHitZone) {
+                    // Check X alignment
                     const pX = getLaneCenterX(playerX.current, playerScreenY, w, h);
+                    if (Math.abs(currentX - pX) < 40) {
+                        let hit = false;
 
-                    if (Math.abs(currentX - pX) < hitDist) {
-                        if (ent.type === 'obstacle') {
-                            setGameState('gameover');
-                        } else if (ent.type === 'coin' && !ent.collected) {
-                            ent.collected = true;
-                            scoreRef.current += 100;
+                        if (ent.type === 'coin') {
+                            hit = true;
+                        } else if (ent.type === 'obstacle') {
+                            // Check Vertical Collision
+                            // Box (Ground): Hits if player is low (playerY > -50 ?)
+                            // We are using negative for UP. 
+                            // So Box hits if playerY > -40 (close to 0).
+                            // Laser (Air): Hits if player is High (standing). 
+                            // Ducking check? Or just Height check?
+                            // Laser is at height -60..-100?
+
+                            if (ent.subType === 'ground') {
+                                // Box: Jump to avoid.
+                                // Player Safe if Y < -50
+                                if (playerY.current > -50) hit = true;
+                            } else {
+                                // Laser: Duck to avoid.
+                                // If ducking, hitbox is small.
+                                // Simpler: Laser hits if NOT ducking.
+                                if (!isDucking.current) hit = true;
+                            }
+                        }
+
+                        if (hit) {
+                            if (ent.type === 'obstacle') {
+                                setGameState('gameover');
+                            } else if (ent.type === 'coin' && !ent.collected) {
+                                ent.collected = true;
+                                scoreRef.current += 100; // Only give score here
+
+                                // Spawn Effects
+                                for (let k = 0; k < 5; k++) {
+                                    particles.current.push({
+                                        id: Math.random(),
+                                        x: currentX, y: ent.y,
+                                        vx: (Math.random() - 0.5) * 10, vy: (Math.random() - 0.5) * 10,
+                                        life: 1.0, color: '#FFD700'
+                                    });
+                                }
+                                floatTexts.current.push({
+                                    id: Math.random(),
+                                    text: '+100', x: currentX, y: ent.y - 50,
+                                    life: 1.0, opacity: 1.0
+                                });
+                            }
                         }
                     }
                 }
 
                 if (ent.collected) continue;
 
+                // Draw Entity
+                // Shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.beginPath();
+                ctx.ellipse(currentX, ent.y + size / 2, size / 2, size / 4, 0, 0, Math.PI * 2);
+                ctx.fill();
+
                 if (ent.type === 'obstacle') {
-                    ctx.fillStyle = COLOR_OBSTACLE;
-                    ctx.fillRect(currentX - size / 2, ent.y - size / 2, size, size);
-                    ctx.shadowColor = COLOR_OBSTACLE;
-                    ctx.shadowBlur = 10;
-                    ctx.strokeRect(currentX - size / 2, ent.y - size / 2, size, size);
+                    if (ent.subType === 'ground') {
+                        // Ground Box
+                        ctx.fillStyle = COLOR_OBSTACLE;
+                        ctx.fillRect(currentX - size / 2, ent.y - size, size, size);
+                        ctx.shadowBlur = 0;
+                        // Top face for 3D effect
+                        ctx.fillStyle = '#ff5555';
+                        ctx.fillRect(currentX - size / 2, ent.y - size - 10 * scale, size, 10 * scale);
+                    } else {
+                        // Air Laser
+                        const laserH = 20 * scale;
+                        const laserY = ent.y - 80 * scale;
+                        ctx.fillStyle = '#ff00ff';
+                        ctx.shadowColor = '#ff00ff';
+                        ctx.shadowBlur = 20;
+                        ctx.fillRect(currentX - size, laserY, size * 2, laserH);
+                        ctx.shadowBlur = 0;
+                        // Posts
+                        ctx.fillStyle = '#fff';
+                        ctx.fillRect(currentX - size, laserY, 5 * scale, 100 * scale); // Left pole
+                        ctx.fillRect(currentX + size - 5 * scale, laserY, 5 * scale, 100 * scale); // Right pole
+                    }
                 } else {
+                    // Coin
                     ctx.beginPath();
-                    ctx.arc(currentX, ent.y, size / 2, 0, Math.PI * 2);
+                    // Bobbing
+                    const bob = Math.sin(Date.now() * 0.01) * 10 * scale;
+                    ctx.arc(currentX, ent.y - 30 * scale + bob, size / 2, 0, Math.PI * 2);
                     ctx.fillStyle = COLOR_COIN;
                     ctx.fill();
                     ctx.shadowColor = COLOR_COIN;
-                    ctx.shadowBlur = 10;
-                    ctx.strokeStyle = '#fff';
+                    ctx.shadowBlur = 15;
+                    ctx.strokeStyle = '#fff'; // Ring
                     ctx.stroke();
                 }
                 ctx.shadowBlur = 0;
@@ -290,23 +490,77 @@ export default function BaseRunner() {
                 if (ent.y > h + 50) entities.current.splice(i, 1);
             }
 
+            // --- Effects ---
+            // Particles
+            for (let i = particles.current.length - 1; i >= 0; i--) {
+                const p = particles.current[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.05;
+                if (p.life <= 0) { particles.current.splice(i, 1); continue; }
+
+                ctx.globalAlpha = p.life;
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, 4, 4);
+                ctx.globalAlpha = 1.0;
+            }
+            // Floating Text
+            for (let i = floatTexts.current.length - 1; i >= 0; i--) {
+                const ft = floatTexts.current[i];
+                ft.y -= 2;
+                ft.life -= 0.02;
+                if (ft.life <= 0) { floatTexts.current.splice(i, 1); continue; }
+
+                ctx.globalAlpha = ft.life;
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 24px sans-serif';
+                ctx.fillText(ft.text, ft.x, ft.y);
+                ctx.globalAlpha = 1.0;
+            }
+
+
             // --- Draw Player ---
-            const playerScreenY = h - 100;
-            const pX = getLaneCenterX(playerX.current, playerScreenY, w, h);
-            const pSize = 50;
+            const playerScreenBaseY = h - 100;
+            const pVisualY = playerScreenBaseY + playerY.current; // Negative Y is UP
+            const pX = getLaneCenterX(playerX.current, playerScreenBaseY, w, h);
 
+            // Squash/Stretch
+            let sX = 50;
+            let sY = 50;
+
+            if (isDucking.current) {
+                sY = 25; // Duck height
+            } else if (playerY.current < 0) {
+                // Jump stretch
+                sX = 40; sY = 60;
+            }
+
+            // Shadow on ground
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
             ctx.beginPath();
-            ctx.arc(pX, playerScreenY, pSize / 2, 0, Math.PI * 2);
+            ctx.ellipse(pX, playerScreenBaseY + 25, 25, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Player Body
+            ctx.shadowColor = COLOR_PLAYER;
+            ctx.shadowBlur = 20;
             ctx.fillStyle = COLOR_PLAYER;
-            ctx.fill();
-            ctx.lineWidth = 4;
-            ctx.strokeStyle = '#fff';
-            ctx.stroke();
 
             ctx.beginPath();
-            ctx.arc(pX, playerScreenY, pSize * 0.3, 0, Math.PI * 2);
-            ctx.fillStyle = '#fff';
+            // Draw rounded rect or circle?
+            // Simple: Circle/Ellipse based on sX sY
+            ctx.ellipse(pX, pVisualY, sX / 2, sY / 2, 0, 0, Math.PI * 2);
             ctx.fill();
+
+            // Inner Core
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.ellipse(pX, pVisualY, sX * 0.3, sY * 0.3, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.shadowBlur = 0;
+
+
 
             frameId = requestAnimationFrame(loop);
         };
