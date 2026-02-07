@@ -5,7 +5,7 @@ import sdk from '@farcaster/frame-sdk';
 // --- Constants ---
 const LANE_COUNT = 3;
 const BASE_SPEED = 5;
-const MAX_SPEED = 25; // Higher max speed for thrill
+const MAX_SPEED = 30; // High speed for warp effect
 const SPEED_INC = 0.005;
 const LANE_SWITCH_SPEED = 0.15;
 const GRAVITY = 0.6;
@@ -58,7 +58,7 @@ function getLineX(lineIndex: number, y: number, w: number, h: number, currentSpe
     // Dynamic FOV / Warp Effect
     // As speed increases, the top convergence widens
     const speedFactor = Math.max(0, (currentSpeed - BASE_SPEED) / (MAX_SPEED - BASE_SPEED));
-    const convergence = 0.1 + (speedFactor * 0.25); // 0.1 to 0.35
+    const convergence = 0.1 + (speedFactor * 0.35); // 0.1 to 0.45 (Wider warp)
 
     const xBottom = (lineIndex / LANE_COUNT) * w;
     const xTop = w / 2 + (xBottom - w / 2) * convergence;
@@ -169,17 +169,6 @@ export default function BaseRunner() {
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
 
-        // Touch
-        const handleTouch = (e: TouchEvent) => {
-            if (gameState !== 'playing') return;
-            const x = e.touches[0].clientX;
-            if (x < window.innerWidth / 2) playerLane.current = Math.max(0, playerLane.current - 1);
-            else playerLane.current = Math.min(LANE_COUNT - 1, playerLane.current + 1);
-        };
-        // We'll attach touch to window or canvas in effect?
-        // Actually the DOM elements below cover it, but global listener is safer for now.
-        // Let's stick to the DOM divs for touch to avoid conflict.
-
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('keyup', handleKeyUp);
@@ -209,12 +198,7 @@ export default function BaseRunner() {
         let frameId: number;
 
         const loop = (time: number) => {
-            if (gameState !== 'playing') {
-                // Draw static or nothing?
-                // Just keeping the last frame is fine, or one render pass.
-                // We'll stop the loop call.
-                return;
-            }
+            if (gameState !== 'playing') return;
 
             const dt = Math.min(time - lastTime.current, 50);
             lastTime.current = time;
@@ -256,55 +240,71 @@ export default function BaseRunner() {
             ctx.fillStyle = COLOR_BG;
             ctx.fillRect(0, 0, w, h);
 
-            // 3. Draw Cyberpunk Background Effects
+            // 3. Draw Background / Effects
 
             // Horizon Glow
             const glow = ctx.createLinearGradient(0, horizon - 50, 0, horizon + 150);
             glow.addColorStop(0, 'transparent');
-            glow.addColorStop(0.4, COLOR_HORIZON);
+            glow.addColorStop(0.4, COLOR_HORIZON); // Purple
             glow.addColorStop(1, 'transparent');
             ctx.fillStyle = glow;
             ctx.fillRect(0, horizon - 50, w, 200);
 
-            // Neon Pillars (Environment)
-            const pillOffset = (time * speed.current * 0.1) % 400;
+            // Neon Pillars (Cyber-Columns)
+            // Parallax effect: Multiply speed by 0.5 for smoother background feel
+            const pillOffset = (time * speed.current * 0.3) % 400;
             for (let z = -400; z < h; z += 200) {
                 const pY = z + pillOffset;
                 if (pY > horizon) {
                     // Determine depth 0..1
                     const depth = (pY - horizon) / (h - horizon);
-                    const pW = 20 * depth;
-                    const pH = 150 * depth; // Tall pillars
+                    const pW = 30 * depth;
+                    const pH = 200 * depth; // Tall pillars
 
                     // X positions: Left of road and Right of road
-                    // Use getLineX for -1 and LANE_COUNT+1
                     const leftX = getLineX(-1.5, pY, w, h, speed.current) - pW;
                     const rightX = getLineX(LANE_COUNT + 1.5, pY, w, h, speed.current);
 
-                    // Randomize color slightly based on z index?
-                    // Use KRYPTON green
-                    ctx.fillStyle = depth > 0.8 ? COLOR_KRYPTON : `rgba(57, 255, 20, ${depth * 0.5})`;
+                    // Use KRYPTON green and Cyan
+                    ctx.fillStyle = depth > 0.8 ? COLOR_KRYPTON : `rgba(57, 255, 20, ${depth * 0.4})`;
 
                     // Left Pillar
                     ctx.fillRect(leftX, pY - pH, pW, pH);
                     // Right Pillar
                     ctx.fillRect(rightX, pY - pH, pW, pH);
+
+                    // Add subtle line/detail to pillar
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(leftX + pW / 2, pY - pH, 2 * depth, pH);
+                    ctx.fillRect(rightX + pW / 2, pY - pH, 2 * depth, pH);
                 }
             }
 
-            // Speed Lines (If fast)
-            if (speed.current > 10) {
-                const lineCount = Math.floor((speed.current - 10) * 1);
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            // Speed Lines (Motion Blur Effect)
+            if (speed.current > 12) {
+                // Number of lines scales with speed
+                const lineCount = Math.floor((speed.current - 10) * 1.5);
+                ctx.strokeStyle = `rgba(255, 255, 255, ${Math.min(0.5, (speed.current - 10) / 40)})`;
                 ctx.lineWidth = 2;
                 ctx.beginPath();
                 for (let i = 0; i < lineCount; i++) {
-                    const lx = Math.random() * w;
-                    const ly = Math.random() * h; // length
-                    if (lx < w * 0.2 || lx > w * 0.8) { // Only on sides
-                        ctx.moveTo(lx, 0);
-                        ctx.lineTo(w / 2 + (lx - w / 2) * 0.2, h); // Radiate
-                    }
+                    // Random X near edges
+                    const lx = Math.random() < 0.5 ? Math.random() * w * 0.3 : w * 0.7 + Math.random() * w * 0.3;
+                    const lyStart = Math.random() * (h - horizon); // Random height below horizon logic? No, just screen
+                    const length = Math.random() * 50 + (speed.current * 2);
+
+                    ctx.moveTo(lx, lyStart);
+                    // Lines radiate from center? Or just fall down?
+                    // Let's make them flow OUTWARDS from center
+                    const cx = w / 2;
+                    const cy = horizon - 50; // vanishing point estimate
+                    const ang = Math.atan2(lyStart - cy, lx - cx);
+
+                    const lxEnd = lx + Math.cos(ang) * length;
+                    const lyEnd = lyStart + Math.sin(ang) * length;
+
+                    ctx.moveTo(lx, lyStart);
+                    ctx.lineTo(lxEnd, lyEnd);
                 }
                 ctx.stroke();
             }
@@ -328,11 +328,9 @@ export default function BaseRunner() {
             // Horizontal Ribs
             const gridOffset = (time * speed.current * 0.5) % 100;
             ctx.globalAlpha = 0.5;
-            for (let gy = horizon; gy < h; gy += 40) {
+            for (let gy = horizon; gy < h; gy += 60) {
                 const y = gy + gridOffset;
                 if (y < h && y > horizon) {
-                    // Since lines converge, horizontal lines are just straight across usually in retro synthwave
-                    // But we want them only ON the road
                     const left = getLineX(0, y, w, h, speed.current);
                     const right = getLineX(LANE_COUNT, y, w, h, speed.current);
                     ctx.moveTo(left, y);
@@ -365,10 +363,10 @@ export default function BaseRunner() {
                         if (ent.subType === 'air') {
                             // Laser Bar (High)
                             const laserY = ent.y - (80 * distScale);
-                            ctx.fillStyle = '#ff00ff';
+                            ctx.fillStyle = '#ff00ff'; // Hot Pink
                             ctx.shadowColor = '#ff00ff';
                             ctx.shadowBlur = 15;
-                            ctx.fillRect(entX - entSize, laserY, entSize * 2, 10 * distScale);
+                            ctx.fillRect(entX - entSize, laserY, entSize * 2, 12 * distScale);
                             ctx.shadowBlur = 0;
                             // Support Poles
                             ctx.fillStyle = '#ccc';
@@ -411,12 +409,11 @@ export default function BaseRunner() {
                             hit = true;
                         } else if (ent.type === 'obstacle') {
                             if (ent.subType === 'air') {
-                                // Laser: Hits you if you are TALL (not ducking)
-                                // Simple logic: if !isDucking -> Hit
+                                // Laser: Hit if !isDucking
                                 if (!isDucking.current) hit = true;
                             } else {
-                                // Ground Box: Hits you if LOW (on ground)
-                                // if playerY > -50 (remember Y is negative upwards, so -10 is low, -100 is high)
+                                // Ground Box: Hit if low (playerY > -50)
+                                // -10 > -50 ? Yes. -100 > -50? No.
                                 if (visualPlayerY > -50) hit = true;
                             }
                         }
@@ -464,7 +461,7 @@ export default function BaseRunner() {
             ctx.ellipse(pX, pY + 25 * duckScale, sizeBase / 2, sizeBase / 4, 0, 0, Math.PI * 2);
             ctx.fill();
 
-            // Player Glow
+            // Needs glow
             ctx.shadowColor = COLOR_PLAYER;
             ctx.shadowBlur = 20;
 
@@ -564,6 +561,13 @@ export default function BaseRunner() {
                     if (x < window.innerWidth / 2) playerLane.current = Math.max(0, playerLane.current - 1);
                     else playerLane.current = Math.min(LANE_COUNT - 1, playerLane.current + 1);
                 }}
+                onTouchStart={(e) => {
+                    // Touch support (replaces old handleTouch)
+                    if (gameState !== 'playing') return;
+                    const x = e.touches[0].clientX;
+                    if (x < window.innerWidth / 2) playerLane.current = Math.max(0, playerLane.current - 1);
+                    else playerLane.current = Math.min(LANE_COUNT - 1, playerLane.current + 1);
+                }}
             />
 
             <canvas ref={canvasRef} style={{ width: '100%', height: '100%' }} />
@@ -603,6 +607,3 @@ export default function BaseRunner() {
         </div>
     );
 }
-
-// Ensure no styles import
-// import styles from ... (Removed)
