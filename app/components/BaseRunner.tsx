@@ -4,23 +4,22 @@ import sdk from '@farcaster/frame-sdk';
 
 // --- Constants ---
 const LANE_COUNT = 3;
-const BASE_SPEED = 10;
-const MAX_SPEED = 50;
-const SPEED_INC = 0.002; // Exponential-ish via logic
-const LANE_SWITCH_SPEED = 0.15;
+const BASE_SPEED = 15;
+const MAX_SPEED = 60;
+const LANE_SWITCH_SPEED = 0.2; // Snappier
 const GRAVITY = 0.8;
 const JUMP_FORCE = -16;
-const GROUND_Y = 0; // Utilized for physics
+const GROUND_Y = 0;
 
-// Professional Palette
-const COLOR_BG_TOP = '#02020a'; // Deep Navy
-const COLOR_BG_BOT = '#2a0a40'; // Deep Purple
-const COLOR_HORIZON = '#a020f0'; // Bright Purple Bloom
+// Anti-Hypnosis Palette
+const COLOR_BG_TOP = '#0A0A2E'; // Deep Space
+const COLOR_BG_BOT = '#1A1A40'; // Horizon
+const COLOR_HORIZON_GLOW = '#4B0082'; // Indigo Glow
 const COLOR_RAIL = '#00F0FF';   // Cyan Neon
-const COLOR_MARKER = '#ffffff'; // White Road Lines
+const COLOR_MARKER = '#FFFFFF'; // White Road Lines
 const COLOR_PLAYER = '#0052FF'; // Electric Blue
-const COLOR_OBSTACLE = '#FF003C'; // Danger Red
-const COLOR_COIN = '#4488ff';   // Blue Coin
+const COLOR_OBSTACLE = '#FF0000'; // Solid Red
+const COLOR_COIN = '#00F0FF';   // Cyan/Blue Coin (Constant)
 
 // --- Interfaces ---
 interface Entity {
@@ -52,53 +51,36 @@ interface FloatingText {
 interface Star {
     x: number;
     y: number;
-    z: number; // Depth for parallax
+    z: number; // Depth
     size: number;
+}
+
+interface Pyramid {
+    x: number; // -1 (left) or 1 (right)
+    y: number; // Distance
+    z: number;
+    type: number;
 }
 
 // --- Helpers (Pure) ---
 function getLineX(lineIndex: number, y: number, w: number, h: number, currentSpeed: number) {
-    const horizon = h * 0.35; // Slightly higher horizon for better view
+    const horizon = h * 0.35;
     if (y < horizon) return w / 2;
 
     const progress = (y - horizon) / (h - horizon);
 
-    // Dynamic Warp: FOV widens with speed
+    // Dynamic Warp
     const speedFactor = Math.max(0, (currentSpeed - BASE_SPEED) / (MAX_SPEED - BASE_SPEED));
-    const convergence = 0.05 + (speedFactor * 0.4); // 0.05 to 0.45
+    const convergence = 0.05 + (speedFactor * 0.4);
 
-    const xBottom = (lineIndex / LANE_COUNT) * w;
     const xCenter = w / 2;
-
-    // Perspective Projection
-    // At bottom (progress=1), x is xBottom
-    // At top (progress=0), x is xCenter +/- convergence offset? 
-    // Actually standard perspective: lines converge to center.
-    // We want the road to appear wider at bottom.
-
-    // Let's use a standard trapezoid projection
-    // Top width = w * convergence
-    // Bottom width = w
-
-    const xTop = xCenter - (w * convergence * 0.5) + ((lineIndex / LANE_COUNT) * w * convergence);
-    // Actually simpler: 
-    // Lerp between xTop and xBottom is linear in screen Y for a simple "road" look, 
-    // but for 3D realism it should be 1/z. 
-    // For this aesthetic, linear Lerp is fine but we want the "Warp" to widen the top.
-
-    // Re-calc based on new requirements:
-    // We want accurate lane lines.
-    // Line 0 is Left edge, Line 3 is Right edge.
-
-    // Base width factors
     const bottomW = w * 1.0;
-    const topW = w * 0.1 * (1 + speedFactor); // Top gets wider as we speed up (Warp)
+    const topW = w * 0.1 * (1 + speedFactor);
 
-    // Maps 0..3 to -0.5 .. 0.5
     const normalizedLane = (lineIndex / LANE_COUNT) - 0.5;
 
-    const xCurrentBottom = (w / 2) + (normalizedLane * bottomW);
-    const xCurrentTop = (w / 2) + (normalizedLane * topW);
+    const xCurrentBottom = xCenter + (normalizedLane * bottomW);
+    const xCurrentTop = xCenter + (normalizedLane * topW);
 
     return xCurrentTop + (xCurrentBottom - xCurrentTop) * progress;
 }
@@ -116,7 +98,7 @@ export default function BaseRunner() {
 
     // Game Refs
     const playerLane = useRef(1);
-    const playerX = useRef(1); // Visual float index
+    const playerX = useRef(1);
     const playerY = useRef(0);
     const playerVy = useRef(0);
     const isDucking = useRef(false);
@@ -131,6 +113,7 @@ export default function BaseRunner() {
     const particles = useRef<Particle[]>([]);
     const floatTexts = useRef<FloatingText[]>([]);
     const stars = useRef<Star[]>([]);
+    const pyramids = useRef<Pyramid[]>([]);
 
     const lastTime = useRef(0);
     const spawnTimer = useRef(0);
@@ -168,30 +151,41 @@ export default function BaseRunner() {
         entities.current.push({
             id: Date.now() + Math.random(),
             lane,
-            y: -200, // Spawn further up
+            y: -200,
             type,
             subType
         });
     }, []);
 
-    // --- Input & Init ---
+    // --- Init ---
     useEffect(() => {
         // Init Stars
         const s: Star[] = [];
-        for (let i = 0; i < 100; i++) {
+        for (let i = 0; i < 80; i++) {
             s.push({
                 x: Math.random(),
                 y: Math.random(),
                 z: Math.random() * 2 + 0.5,
-                size: Math.random() * 1.5
+                size: Math.random() * 2
             });
         }
         stars.current = s;
 
-        // Farcaster
+        // Init Pyramids
+        const p: Pyramid[] = [];
+        for (let i = 0; i < 10; i++) {
+            p.push({
+                x: Math.random() > 0.5 ? 1 : -1,
+                y: Math.random() * 1000,
+                z: Math.random() * 2 + 1,
+                type: Math.floor(Math.random() * 3)
+            });
+        }
+        pyramids.current = p;
+
         try {
             if (sdk && sdk.actions) sdk.actions.ready();
-        } catch (e) { console.error("SDK Error", e); }
+        } catch (e) { console.error(e); }
     }, []);
 
     useEffect(() => {
@@ -225,7 +219,6 @@ export default function BaseRunner() {
         const ctx = canvas.getContext('2d', { alpha: false });
         if (!ctx) return;
 
-        // Resize
         const resize = () => {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
@@ -241,10 +234,13 @@ export default function BaseRunner() {
             const dt = Math.min(time - lastTime.current, 50);
             lastTime.current = time;
 
-            // --- 1. Physics ---
-
-            // Speed (Exponential)
-            speed.current = Math.min(MAX_SPEED, speed.current + (speed.current * 0.0001));
+            // --- Physics ---
+            // Speed (Linear Cap)
+            // Cap at MAX_SPEED, increase log based on score
+            // Actually simple: increase by small factor
+            if (speed.current < MAX_SPEED) {
+                speed.current += 0.01;
+            }
             distanceRef.current += speed.current * 0.01;
 
             // Lane Slide
@@ -262,58 +258,91 @@ export default function BaseRunner() {
 
             // Spawn
             spawnTimer.current += dt;
-            const spawnInterval = 7000 / speed.current;
+            const spawnInterval = 6000 / speed.current; // 6000 base
             if (spawnTimer.current > spawnInterval) {
                 spawnEntity();
                 spawnTimer.current = 0;
             }
 
-            // --- 2. Draw Background (Anti-Hypnosis) ---
+            // --- Background ---
             const w = canvas.width;
             const h = canvas.height;
             const horizon = h * 0.35;
 
-            // Gradient Sky
+            // Deep Space Gradient
             const grad = ctx.createLinearGradient(0, 0, 0, h);
             grad.addColorStop(0, COLOR_BG_TOP);
-            grad.addColorStop(horizon / h, COLOR_BG_BOT);
-            grad.addColorStop(1, '#050510');
+            grad.addColorStop(0.5, COLOR_BG_BOT);
+            grad.addColorStop(1, '#000000');
             ctx.fillStyle = grad;
             ctx.fillRect(0, 0, w, h);
 
-            // Stars (Parallax)
+            // Horizon Glow
+            const glow = ctx.createRadialGradient(w / 2, horizon, 10, w / 2, horizon, w * 0.9);
+            glow.addColorStop(0, COLOR_HORIZON_GLOW);
+            glow.addColorStop(0.5, 'transparent');
+            ctx.fillStyle = glow;
+            ctx.globalAlpha = 0.5;
+            ctx.fillRect(0, 0, w, h);
+            ctx.globalAlpha = 1.0;
+
+            // Stars
             ctx.fillStyle = '#ffffff';
             stars.current.forEach(s => {
-                // Move stars down/out
-                s.y += (speed.current * 0.0005) / s.z;
-                // Reset
+                s.y += (speed.current * 0.0002) / s.z;
                 if (s.y > 1) { s.y = 0; s.x = Math.random(); }
 
-                // Draw based on horizon logic roughly or just pure screen percentage
-                // We'll map 0..1 to 0..horizon for sky stars
-                const sy = s.y * h; // Simple fullscreen for now to look like space travel
-                const sx = (s.x - 0.5) * w * (1 + s.y) + w / 2; // Slight spread
+                const sy = s.y * h * 0.8; // Stick to upper sky mostly
+                const sx = (s.x - 0.5) * w + w / 2;
 
                 ctx.globalAlpha = Math.random() * 0.5 + 0.3;
                 ctx.fillRect(sx, sy, s.size, s.size);
             });
             ctx.globalAlpha = 1.0;
 
-            // Horizon Bloom
-            const bloom = ctx.createRadialGradient(w / 2, horizon, 10, w / 2, horizon, w * 0.8);
-            bloom.addColorStop(0, COLOR_HORIZON);
-            bloom.addColorStop(0.2, 'transparent');
-            ctx.fillStyle = bloom;
-            ctx.globalAlpha = 0.4;
-            ctx.fillRect(0, 0, w, h);
-            ctx.globalAlpha = 1.0;
+            // Pyramids (Parallax)
+            pyramids.current.forEach(p => {
+                // Move towards camera
+                p.y -= speed.current * 0.1;
+                if (p.y < -100) {
+                    p.y = 1000 + Math.random() * 500;
+                    p.x = Math.random() > 0.5 ? 1 : -1;
+                }
+
+                // Render: Simple triangles on side of road
+                // Project X based on depth (y)
+                // We'll fake perspective: center X is vanishing point
+                const zFactor = 500 / (p.y + 100); // Inverse to distance
+                if (zFactor < 0 || zFactor > 5) return;
+
+                const pyBottom = horizon + (p.y * 0.2); // Stick to ground plane roughly
+                // Actually need proper projection relative to horizon:
+                // horizon is y=0 in 3D space.
+                // p.y is distance Z.
+                // screenY = horizon + (camHeight / Z)
+                const screenY = horizon + (3000 / (10 + p.y)); // Fake it
+
+                // Keep them below horizon
+                if (screenY < horizon) return;
+
+                const size = 100 * (100 / (10 + p.y));
+                const centerX = w / 2 + (p.x * w * 0.4) * (100 / (10 + p.y));
+
+                ctx.fillStyle = `rgba(0, 240, 255, ${0.1 + (0.5 * (100 / (10 + p.y)))})`;
+                ctx.beginPath();
+                ctx.moveTo(centerX, screenY - size);
+                ctx.lineTo(centerX - size / 2, screenY);
+                ctx.lineTo(centerX + size / 2, screenY);
+                ctx.closePath();
+                ctx.fill();
+            });
 
 
-            // --- 3. Road / Rails ---
-            ctx.shadowBlur = 10;
+            // --- Road ---
+            ctx.shadowBlur = 15;
             ctx.shadowColor = COLOR_RAIL;
             ctx.strokeStyle = COLOR_RAIL;
-            ctx.lineWidth = 3;
+            ctx.lineWidth = 4;
             ctx.beginPath();
 
             // Left Rail
@@ -324,13 +353,40 @@ export default function BaseRunner() {
             ctx.lineTo(getLineX(LANE_COUNT, horizon, w, h, speed.current), horizon);
             ctx.stroke();
 
-            // Lane Dividers
+            // Neon Tiles (Markers)
             ctx.strokeStyle = COLOR_MARKER;
             ctx.lineWidth = 2;
-            const dashOffset = (-distanceRef.current * 50) % 100;
-            ctx.setLineDash([30, 50]); // Create dash effect
-            ctx.lineDashOffset = dashOffset;
+            ctx.shadowBlur = 5;
 
+            const tileSpacing = 200; // Screen pixels roughly
+            const offset = (distanceRef.current * 20) % tileSpacing;
+
+            // Simple approach: Iterate Y from bottom to horizon
+            // We want log spacing for perspective.
+            // Let's create lines at fixed world Z, project to screen Y.
+            const worldZOffset = (distanceRef.current * 50) % 500;
+
+            ctx.beginPath();
+            for (let z = 100; z < 5000; z += 500) {
+                const screenZ = z - worldZOffset;
+                if (screenZ < 10) continue;
+
+                // Project Z to Y
+                // y = horizon + (H / Z)
+                const progress = 1000 / (screenZ + 500); // 0..1
+                const y = horizon + ((h - horizon) * progress);
+                if (y > h || y < horizon) continue;
+
+                // Draw line across lanes
+                const lx = getLineX(0, y, w, h, speed.current);
+                const rx = getLineX(LANE_COUNT, y, w, h, speed.current);
+                ctx.moveTo(lx, y);
+                ctx.lineTo(rx, y);
+            }
+            ctx.stroke();
+
+            // Divider Lines (Dashed)
+            ctx.setLineDash([20, 40]);
             ctx.beginPath();
             for (let i = 1; i < LANE_COUNT; i++) {
                 ctx.moveTo(getLineX(i, h, w, h, speed.current), h);
@@ -341,35 +397,15 @@ export default function BaseRunner() {
             ctx.shadowBlur = 0;
 
 
-            // --- 4. Warp Lines (High Speed) ---
-            if (speed.current > 20) {
-                const intensity = (speed.current - 20) / 30;
-                ctx.strokeStyle = `rgba(255, 255, 255, ${intensity * 0.5})`;
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                for (let i = 0; i < 10; i++) {
-                    const lx = Math.random() < 0.5 ? Math.random() * w * 0.2 : w * 0.8 + Math.random() * w * 0.2;
-                    const ly = Math.random() * h;
-                    const len = Math.random() * 100 * intensity;
-                    ctx.moveTo(lx, ly);
-                    // Angle away from center
-                    const cx = w / 2; const cy = h / 2;
-                    const ang = Math.atan2(ly - cy, lx - cx);
-                    ctx.lineTo(lx + Math.cos(ang) * len, ly + Math.sin(ang) * len);
-                }
-                ctx.stroke();
-            }
-
-
-            // --- 5. Entities ---
-            const playerScreenY = h - 120; // Fixed player Y on screen
+            // --- Entities ---
+            const playerScreenY = h - 120;
 
             for (let i = entities.current.length - 1; i >= 0; i--) {
                 const ent = entities.current[i];
                 if (ent.y === -200) ent.y = horizon;
 
                 const progress = (ent.y - horizon) / (h - horizon);
-                const scale = 0.1 + (progress * 1.5); // Perspective scaling
+                const scale = 0.1 + (progress * 1.5);
                 ent.y += speed.current * scale;
 
                 const ex = getLaneCenterX(ent.lane, ent.y, w, h, speed.current);
@@ -377,50 +413,34 @@ export default function BaseRunner() {
 
                 if (!ent.collected) {
                     if (ent.type === 'coin') {
-                        // Blue Coin with White Center Glow
+                        // Constant Blue/Cyan with White Glow
                         const gradC = ctx.createRadialGradient(ex, ent.y, size * 0.1, ex, ent.y, size * 0.5);
-                        gradC.addColorStop(0, 'white');
-                        gradC.addColorStop(0.5, COLOR_COIN);
+                        gradC.addColorStop(0, '#FFFFFF');
+                        gradC.addColorStop(0.4, COLOR_COIN); // Cyan
                         gradC.addColorStop(1, 'transparent');
 
                         ctx.fillStyle = gradC;
                         ctx.beginPath();
                         ctx.arc(ex, ent.y, size / 2, 0, Math.PI * 2);
                         ctx.fill();
-
-                        // Solid inner core
-                        ctx.fillStyle = COLOR_COIN;
-                        ctx.beginPath();
-                        ctx.arc(ex, ent.y, size * 0.3, 0, Math.PI * 2);
-                        ctx.fill();
                     } else {
-                        // Obstacle (Red Wireframe Cube)
-                        // Simple 2.5D Cube
+                        // Obstacle: Red Cube
                         const boxS = size;
                         const boxY = ent.subType === 'air' ? ent.y - (100 * scale) : ent.y - boxS / 2;
 
-                        ctx.strokeStyle = COLOR_OBSTACLE;
-                        ctx.lineWidth = 2 * scale;
-                        ctx.shadowColor = COLOR_OBSTACLE;
-                        ctx.shadowBlur = 10;
+                        ctx.fillStyle = COLOR_OBSTACLE;
+                        ctx.strokeStyle = '#330000'; // Dark border
+                        ctx.lineWidth = 2;
 
-                        // Front Face
+                        // Face
+                        ctx.fillRect(ex - boxS / 2, boxY - boxS / 2, boxS, boxS);
                         ctx.strokeRect(ex - boxS / 2, boxY - boxS / 2, boxS, boxS);
 
-                        // Inner "X" for danger
-                        ctx.beginPath();
-                        ctx.moveTo(ex - boxS / 2, boxY - boxS / 2);
-                        ctx.lineTo(ex + boxS / 2, boxY + boxS / 2);
-                        ctx.moveTo(ex + boxS / 2, boxY - boxS / 2);
-                        ctx.lineTo(ex - boxS / 2, boxY + boxS / 2);
-                        ctx.stroke();
+                        // Inner detail
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+                        ctx.fillRect(ex - boxS / 4, boxY - boxS / 4, boxS / 2, boxS / 2);
 
-                        ctx.fillStyle = `rgba(255, 0, 60, 0.2)`;
-                        ctx.fillRect(ex - boxS / 2, boxY - boxS / 2, boxS, boxS);
-
-                        ctx.shadowBlur = 0;
-
-                        // Pole if air
+                        // Pole
                         if (ent.subType === 'air') {
                             ctx.fillStyle = '#666';
                             ctx.fillRect(ex - 2, boxY + boxS / 2, 4, 150 * scale);
@@ -435,8 +455,8 @@ export default function BaseRunner() {
                         let hit = false;
                         if (ent.type === 'coin') hit = true;
                         else {
-                            if (ent.subType === 'air') { if (!isDucking.current) hit = true; } // Hit high if not ducking
-                            else { if (playerY.current > -50) hit = true; } // Hit low if on ground
+                            if (ent.subType === 'air') { if (!isDucking.current) hit = true; }
+                            else { if (playerY.current > -50) hit = true; } // Low hit
                         }
 
                         if (hit) {
@@ -456,21 +476,18 @@ export default function BaseRunner() {
                 if (ent.y > h + 150) entities.current.splice(i, 1);
             }
 
-
-            // --- 6. Player ---
+            // --- Player ---
             const pX = getLaneCenterX(playerX.current, playerScreenY, w, h, speed.current);
             const pY = playerScreenY + playerY.current;
-            const tilt = (playerX.current - playerLane.current) * -0.5; // Tilt opposite to slide? Or same?
-            // Actually, if moving Right (lane increases), (target - current) is positive.
-            // Tilt should be into the turn.
-            // Let's us velocity logic:
-            const pVelX = (playerLane.current - playerX.current);
+
+            // Calc tilt locally
+            const tilt = (playerLane.current - playerX.current) * 0.4;
 
             ctx.save();
             ctx.translate(pX, pY);
-            ctx.rotate(pVelX * 0.5); // Tilt
+            ctx.rotate(tilt);
 
-            // Player Shadow
+            // Shadow
             if (playerY.current === GROUND_Y) {
                 ctx.fillStyle = 'rgba(0,0,0,0.5)';
                 ctx.beginPath();
@@ -478,7 +495,7 @@ export default function BaseRunner() {
                 ctx.fill();
             }
 
-            // Player Body (Triangle/Ship shape)
+            // Ship
             const dS = isDucking.current ? 0.5 : 1;
             ctx.fillStyle = COLOR_PLAYER;
             ctx.shadowColor = COLOR_PLAYER;
@@ -487,7 +504,7 @@ export default function BaseRunner() {
             ctx.beginPath();
             ctx.moveTo(0, -30 * dS);
             ctx.lineTo(20, 20 * dS);
-            ctx.lineTo(0, 10 * dS); // Tail indent
+            ctx.lineTo(0, 10 * dS);
             ctx.lineTo(-20, 20 * dS);
             ctx.closePath();
             ctx.fill();
@@ -502,7 +519,7 @@ export default function BaseRunner() {
             ctx.shadowBlur = 0;
 
 
-            // --- 7. Particles & Text ---
+            // --- FX ---
             for (let i = particles.current.length - 1; i >= 0; i--) {
                 const p = particles.current[i];
                 p.y += p.vy;
@@ -512,7 +529,7 @@ export default function BaseRunner() {
                     ctx.globalAlpha = p.life;
                     ctx.fillStyle = p.color;
                     ctx.beginPath();
-                    ctx.arc(p.x, p.y, 10 * p.life, 0, Math.PI * 2);
+                    ctx.arc(p.x, p.y, 8 * p.life, 0, Math.PI * 2);
                     ctx.fill();
                 }
             }
@@ -546,15 +563,10 @@ export default function BaseRunner() {
     // --- Render ---
     return (
         <div style={{
-            position: 'relative',
-            width: '100vw',
-            height: '100vh',
-            backgroundColor: 'black',
-            overflow: 'hidden',
-            fontFamily: 'sans-serif',
-            userSelect: 'none'
+            position: 'relative', width: '100vw', height: '100vh',
+            backgroundColor: 'black', overflow: 'hidden',
+            fontFamily: 'sans-serif', userSelect: 'none'
         }}>
-            {/* UI */}
             <div style={{
                 position: 'absolute', top: 20, width: '100%',
                 textAlign: 'center', pointerEvents: 'none', zIndex: 10
@@ -565,7 +577,6 @@ export default function BaseRunner() {
                 }}>{score}</h1>
             </div>
 
-            {/* Controls Layer */}
             <div
                 style={{ position: 'absolute', inset: 0, zIndex: 5 }}
                 onMouseDown={(e) => {
@@ -579,7 +590,6 @@ export default function BaseRunner() {
 
             <canvas ref={canvasRef} style={{ display: 'block' }} />
 
-            {/* Game Over */}
             {gameState === 'gameover' && (
                 <div style={{
                     position: 'absolute', inset: 0,
@@ -588,19 +598,14 @@ export default function BaseRunner() {
                     alignItems: 'center', justifyContent: 'center',
                     zIndex: 20, backdropFilter: 'blur(10px)'
                 }}>
-                    <h2 style={{ fontSize: '3rem', color: COLOR_OBSTACLE, textShadow: '0 0 20px red' }}>CRITICAL FAILURE</h2>
+                    <h2 style={{ fontSize: '3rem', color: COLOR_OBSTACLE, textShadow: '0 0 20px red' }}>CRASHED</h2>
                     <p style={{ color: 'white', fontSize: '1.5rem' }}>SCORE: {score}</p>
                     <button
                         onClick={restartGame}
                         style={{
-                            marginTop: 20,
-                            background: COLOR_PLAYER,
-                            color: 'white',
-                            border: 'none',
-                            padding: '15px 40px',
-                            fontSize: '1.2rem',
-                            borderRadius: '5px',
-                            cursor: 'pointer',
+                            marginTop: 20, background: COLOR_PLAYER, color: 'white',
+                            border: 'none', padding: '15px 40px', fontSize: '1.2rem',
+                            borderRadius: '5px', cursor: 'pointer',
                             boxShadow: `0 0 20px ${COLOR_PLAYER}`
                         }}
                     >
