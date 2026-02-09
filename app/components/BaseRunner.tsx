@@ -2,6 +2,15 @@
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import sdk from '@farcaster/frame-sdk';
 
+// --- Tipler (Vercel Hatasını Çözen Kısım) ---
+interface GameEntity {
+    id: number;
+    lane: number;
+    z: number;
+    type: 'obstacle' | 'coin';
+    collected: boolean;
+}
+
 export default function BaseRunner() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [score, setScore] = useState(0);
@@ -9,7 +18,7 @@ export default function BaseRunner() {
 
     const playerLane = useRef(1);
     const playerX = useRef(0.5);
-    const entities = useRef<any[]>([]);
+    const entities = useRef<GameEntity[]>([]); // Artık 'any' değil, GameEntity[]
     const lastTime = useRef(0);
     const speed = useRef(6);
 
@@ -44,7 +53,6 @@ export default function BaseRunner() {
         let frameId: number;
         let spawnTimer = 0;
 
-        // Resize handler - Ekran boyutuna göre canvası ayarlar
         const handleResize = () => {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
@@ -72,7 +80,7 @@ export default function BaseRunner() {
 
             playerX.current += (getLaneCenterX(playerLane.current) - playerX.current) * 0.15;
 
-            // 1. Arka Plan (Deep Space Gradient)
+            // 1. Arka Plan
             const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
             grad.addColorStop(0, '#02020a');
             grad.addColorStop(1, '#080826');
@@ -110,11 +118,10 @@ export default function BaseRunner() {
                 const xPos = (w / 2) + (getLaneCenterX(ent.lane) - 0.5) * w * p;
                 const yPos = horizon + (h - horizon) * p;
 
-                // Çarpışma Testi
-                if (p > 0.8 && p < 0.9 && ent.lane === playerLane.current) {
+                if (p > 0.8 && p < 0.9 && ent.lane === playerLane.current && !ent.collected) {
                     if (ent.type === 'obstacle') {
                         setGameState('gameover');
-                    } else if (!ent.collected) {
+                    } else {
                         ent.collected = true;
                         setScore(s => s + 10);
                     }
@@ -123,7 +130,6 @@ export default function BaseRunner() {
                 if (ent.collected) continue;
 
                 if (ent.type === 'obstacle') {
-                    // NEON KEMER (Ref resmindeki gibi)
                     ctx.save();
                     ctx.strokeStyle = '#FF0420';
                     ctx.lineWidth = 4 + (p * 4);
@@ -137,7 +143,6 @@ export default function BaseRunner() {
                     ctx.stroke();
                     ctx.restore();
                 } else {
-                    // BASE LOGO COIN
                     ctx.save();
                     ctx.fillStyle = '#0052FF';
                     ctx.shadowBlur = 10;
@@ -153,7 +158,7 @@ export default function BaseRunner() {
                 }
             }
 
-            // 4. Oyuncu (Senin karakterin)
+            // 4. Oyuncu
             const pX = playerX.current * w;
             const pY = h * 0.85;
             ctx.save();
