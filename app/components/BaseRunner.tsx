@@ -4,12 +4,14 @@ import sdk from '@farcaster/frame-sdk';
 
 // --- Constants ---
 const LANE_COUNT = 3;
-const INITIAL_SPEED = 3;  // Slower start as requested
-const MAX_SPEED = 18;     // Cap at 18
+const BASE_SPEED = 3;       // Start significantly slower
+const MAX_SPEED = 18;       // Cap speed at 18
 const LANE_SWITCH_SPEED = 0.15;
 const GRAVITY = 0.6;
 const JUMP_FORCE = -14;
-const GROUND_Y = 0;
+const GROUND_Y = 0;         // Player Y (0 is ground, negative is air)
+
+const SPAWN_Z = 2000;       // Entities spawn at this Z depth
 
 // Colors
 const COLOR_BG_TOP = '#05051a';
@@ -25,10 +27,9 @@ const COLOR_PLAYER = '#0052FF';
 interface Entity {
     id: number;
     lane: number;
-    y: number;
-    type: 'obstacle' | 'coin';
-    subType?: 'ground-eth' | 'air-arch'; // Explicit types
-    collected?: boolean;
+    z: number;
+    type: 'coin' | 'eth' | 'arch';
+    collected: boolean;
 }
 
 interface Particle {
@@ -56,14 +57,14 @@ export default function BaseRunner() {
     const [gameState, setGameState] = useState<'playing' | 'gameover'>('playing');
 
     // Physics Refs
-    const playerLane = useRef(1);
-    const playerX = useRef(1); // 0..2 float
-    const playerY = useRef(0);
-    const playerVy = useRef(0);
+    const playerLane = useRef(1); // 0, 1, 2
+    const playerX = useRef(1);    // Interpolated lane position (0.0 - 2.0)
+    const playerY = useRef(0);    // Vertical position (0=ground, <0=air)
+    const playerVy = useRef(0);   // Vertical velocity
     const isDucking = useRef(false);
 
-    const speed = useRef(INITIAL_SPEED);
-    const timeAlive = useRef(0); // For speed curve
+    const speed = useRef(BASE_SPEED);
+    const timeAlive = useRef(0);
 
     const entities = useRef<Entity[]>([]);
     const particles = useRef<Particle[]>([]);
@@ -72,50 +73,79 @@ export default function BaseRunner() {
     const lastTime = useRef(0);
     const spawnTimer = useRef(0);
 
-    // --- Helpers (All useCallback) ---
+    // --- Helpers ---
 
-    const getLaneX = useCallback((laneIndex: number, y: number, w: number, h: number) => {
+    // Project (lane, z) -> Screen Coordinates {x, y, scale}
+    const project = useCallback((lane: number, z: number, w: number, h: number) => {
         const horizonY = h * 0.35;
-        if (y < horizonY) return w / 2;
+        // Perspective formula: scale = F / (z + F)
+        // Adjust F (focal length equivalent) to tweak depth feel.
+        // Let's say at z=0 (player), scale=1.
+        // At z=SPAWN_Z (2000), scale is small.
+        const f = 500;
+        const scale = f / (z + f);
 
-        const progress = (y - horizonY) / (h - horizonY);
+        // Map z to y. When z=0, y should be near bottom (e.g., h - 50). 
+        // When z is large, y approaches horizonY.
+        // Actually simpler: interpolate between horizonY and bottom based on scale?
+        // Let's use standard projection: y = horizonY + (cameraHeight * scale) maybe?
+        // Let's stick to the previous linear-ish visual but with Z:
+        // yBase = horizonY + (h - horizonY) * scale
+        const yBase = horizonY + (h - horizonY) * scale;
 
-        const topW = w * 0.02;
-        const botW = w * 1.2;
+        // Lane width at this depth
+        const laneWidthBase = w * 0.5; // Width at bottom
+        // We want the road to converge to a point/small width at horizon
+        // projectedLaneWidth = laneWidthBase * scale
+        const laneUnit = (w * 0.6) * scale / LANE_COUNT;
 
-        const currentW = topW + (botW - topW) * progress;
-        const laneUnit = currentW / LANE_COUNT;
+        // Center X
+        const cx = w / 2;
+        // Lane offset
+        const x = cx + (lane - 1.5 + 0.5) * laneUnit * 2.5;
+        // Refined lane logic:
+        // lane 0 -> left, 1 -> center, 2 -> right
+        // (lane - 1) gives -1, 0, 1
+        const laneOffset = (lane - 1) * (w * 0.35) * scale;
+        const px = cx + laneOffset;
 
-        return (w / 2) + (laneIndex - 1) * laneUnit;
+        return { x: px, y: yBase, scale };
     }, []);
 
     const spawnEntity = useCallback(() => {
+        // Random lane
         const lane = Math.floor(Math.random() * LANE_COUNT);
-        const type = Math.random() > 0.6 ? 'obstacle' : 'coin';
-        let subType: 'ground-eth' | 'air-arch' | undefined;
 
-        if (type === 'obstacle') {
-            // 50/50 chance for Jump (ETH) vs Duck (Arch)
-            subType = Math.random() > 0.5 ? 'ground-eth' : 'air-arch';
+        // Determine type
+        const r = Math.random();
+        let type: 'coin' | 'eth' | 'arch';
+
+        if (r > 0.6) {
+            // Obstacle (40% chance)
+            // 50/50 split between eth (jump) and arch (duck)
+            type = Math.random() > 0.5 ? 'eth' : 'arch';
+        } else {
+            // Coin (60% chance)
+            type = 'coin';
         }
 
         entities.current.push({
             id: Date.now() + Math.random(),
             lane,
-            y: -100, // Spawn at horizon
+            z: SPAWN_Z,
             type,
-            subType
+            collected: false
         });
     }, []);
 
     const restartGame = useCallback(() => {
         playerLane.current = 1;
+        playerX.current = 1;
         playerY.current = 0;
         playerVy.current = 0;
         isDucking.current = false;
-        playerX.current = 1;
 
-        speed.current = INITIAL_SPEED;
+        speed.current = BASE_SPEED;
         timeAlive.current = 0;
 
         entities.current = [];
@@ -130,9 +160,11 @@ export default function BaseRunner() {
     // --- Init ---
     useEffect(() => {
         try {
-            if (sdk?.actions) sdk.actions.ready();
+            if (sdk && sdk.actions) {
+                sdk.actions.ready();
+            }
         } catch (e) {
-            console.error('Farcaster SDK error:', e);
+            console.error(e);
         }
     }, []);
 
@@ -142,17 +174,26 @@ export default function BaseRunner() {
             if (gameState !== 'playing') return;
             const k = e.key.toLowerCase();
 
+            // Lanes
             if (k === 'a' || k === 'arrowleft') {
                 playerLane.current = Math.max(0, playerLane.current - 1);
             }
             if (k === 'd' || k === 'arrowright') {
                 playerLane.current = Math.min(LANE_COUNT - 1, playerLane.current + 1);
             }
+
+            // Jump
             if ((k === 'w' || k === 'arrowup' || k === ' ') && playerY.current === GROUND_Y) {
                 playerVy.current = JUMP_FORCE;
             }
+
+            // Duck
             if (k === 's' || k === 'arrowdown') {
                 isDucking.current = true;
+                // Fast fall if in air
+                if (playerY.current < GROUND_Y) {
+                    playerVy.current += 10;
+                }
             }
         };
 
@@ -169,9 +210,9 @@ export default function BaseRunner() {
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('keyup', handleKeyUp);
         };
-    }, [gameState]);
+    }, [gameState]); // Dependencies: needed for gameState check
 
-    // --- Loop ---
+    // --- Game Loop ---
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -193,9 +234,12 @@ export default function BaseRunner() {
             const dt = Math.min(time - lastTime.current, 50);
             lastTime.current = time;
 
-            // --- Physics ---
+            // --- Update Physics ---
+
+            // Player Lane Smooth
             playerX.current += (playerLane.current - playerX.current) * LANE_SWITCH_SPEED;
 
+            // Player Jump/Gravity
             if (playerY.current < GROUND_Y || playerVy.current !== 0) {
                 playerY.current += playerVy.current;
                 playerVy.current += GRAVITY;
@@ -207,17 +251,92 @@ export default function BaseRunner() {
 
             // Speed Curve
             timeAlive.current += dt;
-            // Increase speed by 0.5 every 2 seconds roughly, capped at MAX
-            const targetSpeed = Math.min(MAX_SPEED, INITIAL_SPEED + (timeAlive.current / 2000));
-            speed.current = targetSpeed;
+            // Increase speed very gradually
+            // e.g. +1 speed every 5 seconds?
+            // speed = base + (time / factor)
+            // 5000ms = +1 -> 15 speed gain needs 75s
+            // Capped at MAX_SPEED
+            const addedSpeed = Math.min(MAX_SPEED - BASE_SPEED, timeAlive.current / 4000);
+            speed.current = BASE_SPEED + addedSpeed;
 
-            // Spawn
+            // Spawn Logic
             spawnTimer.current += dt;
-            // Spawn interval decreases as speed increases to keep density reasonable
-            const interval = 6000 / speed.current;
-            if (spawnTimer.current > interval) {
+            // Spawn interval inverse to speed
+            // At speed 3 -> interval 2000ms?
+            // At speed 18 -> interval 300ms?
+            const currentInterval = 5000 / speed.current;
+            if (spawnTimer.current > currentInterval) {
                 spawnEntity();
                 spawnTimer.current = 0;
+            }
+
+            // Update Entities
+            for (let i = entities.current.length - 1; i >= 0; i--) {
+                const ent = entities.current[i];
+                ent.z -= speed.current * 8; // Multiplier to map speed to Z units
+
+                if (ent.z < -200) {
+                    // Passed player
+                    entities.current.splice(i, 1);
+                    continue;
+                }
+
+                // Collision Detection
+                // Player is effectively at z=0, lane=playerX (float), y=playerY
+                // Entity is at ent.z, ent.lane (int)
+                // Check Z proximity
+                if (!ent.collected && ent.z < 50 && ent.z > -50) {
+                    // Check Horizontal: visual overlap
+                    // Simple lane check: if absolute difference < 0.5
+                    if (Math.abs(ent.lane - playerX.current) < 0.6) {
+
+                        let collision = false;
+
+                        if (ent.type === 'coin') {
+                            // Coin always hits if in lane
+                            ent.collected = true;
+                            setScore(s => s + 10);
+                            floatTexts.current.push({
+                                text: '+10', x: 0, y: 0, life: 1, opacity: 1
+                                // Coords updated in render to follow player
+                            });
+                        } else if (ent.type === 'eth') {
+                            // ETH Obstacle -> Must JUMP (playerY < threshold)
+                            // A jump usually goes to -100 or so.
+                            // Ground is 0.
+                            // If player is on ground (0) or low jump -> Collision
+                            if (playerY.current > -40) {
+                                collision = true;
+                            }
+                        } else if (ent.type === 'arch') {
+                            // ARCH Obstacle -> Must DUCK
+                            if (!isDucking.current) {
+                                collision = true;
+                            }
+                        }
+
+                        if (collision) {
+                            setGameState('gameover');
+                        }
+                    }
+                }
+            }
+
+            // Update Particles
+            for (let i = particles.current.length - 1; i >= 0; i--) {
+                const p = particles.current[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.04;
+                if (p.life <= 0) particles.current.splice(i, 1);
+            }
+
+            // Update Text
+            for (let i = floatTexts.current.length - 1; i >= 0; i--) {
+                const ft = floatTexts.current[i];
+                ft.y -= 2;
+                ft.life -= 0.03;
+                if (ft.life <= 0) floatTexts.current.splice(i, 1);
             }
 
             // --- Render ---
@@ -225,253 +344,176 @@ export default function BaseRunner() {
             const h = canvas.height;
             const horizonY = h * 0.35;
 
-            // 1. Background
+            // Background
             const grad = ctx.createLinearGradient(0, 0, 0, h);
             grad.addColorStop(0, COLOR_BG_TOP);
             grad.addColorStop(1, COLOR_BG_BOT);
             ctx.fillStyle = grad;
             ctx.fillRect(0, 0, w, h);
 
-            // 2. Lanes
-            ctx.lineWidth = 6;
+            // Draw Lanes
+            ctx.lineWidth = 4;
             ctx.strokeStyle = COLOR_LANE;
-            ctx.lineCap = 'round';
-            ctx.shadowBlur = 20;
             ctx.shadowColor = COLOR_LANE;
-
+            ctx.shadowBlur = 15;
             ctx.beginPath();
-            for (let i = -0.5; i <= LANE_COUNT - 0.5; i += 1) {
-                const xBot = getLaneX(i, h, w, h);
-                const xTop = getLaneX(i, horizonY, w, h);
-                ctx.moveTo(xBot, h);
-                ctx.lineTo(xTop, horizonY);
+
+            // Draw lines for lane dividers
+            // Lanes are 0, 1, 2. Dividers are at -0.5, 0.5, 1.5, 2.5 coords effectively
+            for (let i = -0.5; i <= LANE_COUNT - 0.5; i++) {
+                // Projection for lane lines
+                const pNear = project(i + 0.5, 0, w, h); // z=0
+                const pFar = project(i + 0.5, SPAWN_Z, w, h); // z=max
+
+                ctx.moveTo(pNear.x, pNear.y);
+                ctx.lineTo(pFar.x, pFar.y);
             }
             ctx.stroke();
             ctx.shadowBlur = 0;
 
-            // 3. Entities
-            const playerScreenY = h - 180;
+            // Draw Entities (Painter's Algo: Far to Near)
+            // Explicitly sort by Z (descending)
+            entities.current.sort((a, b) => b.z - a.z);
 
-            for (let i = entities.current.length - 1; i >= 0; i--) {
-                const ent = entities.current[i];
-                if (ent.y === -100) ent.y = horizonY;
+            for (const ent of entities.current) {
+                if (ent.collected) continue;
 
-                const progress = (ent.y - horizonY) / (h - horizonY);
-                const scale = 0.1 + (progress * 1.5);
-                ent.y += speed.current * scale;
+                const proj = project(ent.lane, ent.z, w, h);
+                const size = 100 * proj.scale;
 
-                const ex = getLaneX(ent.lane, ent.y, w, h);
-                const size = 90 * scale;
+                if (ent.type === 'coin') {
+                    // Draw Coin
+                    ctx.shadowColor = COLOR_COIN_BASE;
+                    ctx.shadowBlur = 10;
+                    ctx.fillStyle = COLOR_COIN_BASE;
+                    ctx.beginPath();
+                    ctx.arc(proj.x, proj.y - size / 2, size / 2, 0, Math.PI * 2);
+                    ctx.fill();
 
-                if (!ent.collected) {
-                    if (ent.type === 'coin') {
-                        // --- COIN: Base Logo (Blue Sphere + White Center) ---
-                        const pulse = 1 + Math.sin(time * 0.005) * 0.1;
-                        const pulsSize = size * pulse;
+                    ctx.fillStyle = COLOR_COIN_INNER;
+                    ctx.beginPath();
+                    ctx.arc(proj.x, proj.y - size / 2, size / 3, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                } else if (ent.type === 'eth') {
+                    // ETH Diamond (Ground)
+                    // Needs to sit on the floor (proj.y)
+                    const halfW = size * 0.4;
+                    const height = size * 0.8;
 
-                        ctx.shadowColor = COLOR_COIN_BASE;
-                        ctx.shadowBlur = 20;
+                    ctx.fillStyle = COLOR_OBSTACLE_ETH;
+                    ctx.shadowColor = COLOR_OBSTACLE_ETH;
+                    ctx.shadowBlur = 20;
 
-                        const g = ctx.createRadialGradient(ex, ent.y, pulsSize * 0.1, ex, ent.y, pulsSize * 0.5);
-                        g.addColorStop(0, '#5599FF');
-                        g.addColorStop(1, COLOR_COIN_BASE);
-                        ctx.fillStyle = g;
+                    ctx.beginPath();
+                    ctx.moveTo(proj.x, proj.y - height); // Top
+                    ctx.lineTo(proj.x + halfW, proj.y - height / 2); // Right
+                    ctx.lineTo(proj.x, proj.y); // Bottom
+                    ctx.lineTo(proj.x - halfW, proj.y - height / 2); // Left
+                    ctx.closePath();
+                    ctx.fill();
 
-                        ctx.beginPath();
-                        ctx.arc(ex, ent.y, pulsSize / 2, 0, Math.PI * 2);
-                        ctx.fill();
+                    // Inner detail
+                    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                    ctx.beginPath();
+                    ctx.moveTo(proj.x, proj.y - height);
+                    ctx.lineTo(proj.x + halfW / 2, proj.y - height / 2);
+                    ctx.lineTo(proj.x, proj.y);
+                    ctx.fill();
 
-                        ctx.fillStyle = COLOR_COIN_INNER;
-                        ctx.beginPath();
-                        ctx.arc(ex, ent.y, pulsSize / 3.5, 0, Math.PI * 2);
-                        ctx.fill();
-                        ctx.shadowBlur = 0;
+                    ctx.shadowBlur = 0;
 
-                    } else if (ent.type === 'obstacle') {
-                        // --- OBSTACLES ---
-                        if (ent.subType === 'ground-eth') {
-                            // PURPLE ETH DIAMOND (JUMP)
-                            // Draw Diamond on ground
-                            ctx.fillStyle = COLOR_OBSTACLE_ETH; // Purple
-                            ctx.shadowColor = COLOR_OBSTACLE_ETH;
-                            ctx.shadowBlur = 20;
+                } else if (ent.type === 'arch') {
+                    // RED Arch (High)
+                    // Should be tall enough to walk under unless ducking
+                    const archW = size;
+                    const archH = size * 1.2;
+                    const legW = size * 0.1;
 
-                            const halfW = (size * 0.6) / 2;
-                            const halfH = (size * 1.0) / 2; // Tall diamond
+                    ctx.fillStyle = COLOR_OBSTACLE_ARCH;
+                    ctx.shadowColor = COLOR_OBSTACLE_ARCH;
+                    ctx.shadowBlur = 20;
 
-                            // Center is (ex, ent.y)
-                            // But usually ground obstacles sit ON the ground line.
-                            // Let's shift it up slightly so the bottom touches ground logic (ent.y)
-                            const bottomY = ent.y;
-                            const topY = ent.y - size;
+                    // Draw Arch shape
+                    // Left leg
+                    ctx.fillRect(proj.x - archW / 2, proj.y - archH, legW, archH);
+                    // Right leg
+                    ctx.fillRect(proj.x + archW / 2 - legW, proj.y - archH, legW, archH);
+                    // Top Bar
+                    ctx.fillRect(proj.x - archW / 2, proj.y - archH, archW, legW * 2);
 
-                            ctx.beginPath();
-                            ctx.moveTo(ex, topY); // Top
-                            ctx.lineTo(ex + halfW, ent.y - size / 2); // Right
-                            ctx.lineTo(ex, bottomY); // Bottom
-                            ctx.lineTo(ex - halfW, ent.y - size / 2); // Left
-                            ctx.closePath();
-                            ctx.fill();
-                            ctx.shadowBlur = 0;
+                    ctx.shadowBlur = 0;
 
-                            // Inner detail for ETH logo look
-                            ctx.fillStyle = 'rgba(255,255,255,0.3)';
-                            ctx.beginPath();
-                            ctx.moveTo(ex, topY);
-                            ctx.lineTo(ex + halfW * 0.5, ent.y - size / 2);
-                            ctx.lineTo(ex, bottomY);
-                            ctx.fill();
-
-                        } else {
-                            // RED NEON ARCH (DUCK/SLIDE)
-                            // Elevated
-                            const archW = size * 1.2;
-                            const archH = size * 1.0;
-                            const lineThick = 10 * scale;
-
-                            // Elevated Base Logic
-                            const msgY = ent.y - (140 * scale); // Floating high
-
-                            ctx.strokeStyle = COLOR_OBSTACLE_ARCH;
-                            ctx.lineWidth = lineThick;
-                            ctx.shadowColor = COLOR_OBSTACLE_ARCH;
-                            ctx.shadowBlur = 20;
-
-                            ctx.beginPath();
-                            // Left Leg
-                            ctx.moveTo(ex - archW / 2, msgY + archH);
-                            ctx.lineTo(ex - archW / 2, msgY);
-                            // Top
-                            ctx.quadraticCurveTo(ex, msgY - (archW * 0.3), ex + archW / 2, msgY);
-                            // Right Leg
-                            ctx.lineTo(ex + archW / 2, msgY + archH);
-
-                            ctx.stroke();
-                            ctx.shadowBlur = 0;
-
-                            // Danger Zone Indicator on Ground
-                            ctx.fillStyle = 'rgba(255, 0, 60, 0.2)';
-                            ctx.fillRect(ex - archW / 2, ent.y - 10 * scale, archW, 20 * scale);
-                        }
-                    }
+                    // Warning marker on ground
+                    ctx.fillStyle = 'rgba(255,0,0,0.3)';
+                    ctx.fillRect(proj.x - archW / 2, proj.y - size * 0.1, archW, size * 0.1);
                 }
-
-                // Collision
-                // 2D Projection Check
-                if (!ent.collected && Math.abs(ent.y - playerScreenY) < 50) {
-                    const pCx = getLaneX(playerX.current, playerScreenY, w, h);
-
-                    // Horizontal Check: Are we in the same lane visually?
-                    if (Math.abs(ex - pCx) < 60) {
-                        let hit = false;
-                        if (ent.type === 'coin') {
-                            hit = true;
-                        } else {
-                            // Obstacle Logic
-                            if (ent.subType === 'ground-eth') {
-                                // Must JUMP
-                                // If playerY is near 0 (ground), hit.
-                                // If playerY < -something (jumping), safe.
-                                // Let's simplify: MUST be significantly in air (> 50px visual jump)
-                                if (playerY.current > -40) hit = true;
-                            } else {
-                                // 'air-arch' -> Must DUCK
-                                if (!isDucking.current) hit = true;
-                            }
-                        }
-
-                        if (hit) {
-                            if (ent.type === 'coin') {
-                                ent.collected = true;
-                                setScore(s => s + 10);
-
-                                floatTexts.current.push({
-                                    text: '+10', x: ex, y: ent.y - 60,
-                                    life: 1, opacity: 1
-                                });
-                                // Particles
-                                for (let p = 0; p < 8; p++) {
-                                    particles.current.push({
-                                        x: ex, y: ent.y,
-                                        vx: (Math.random() - 0.5) * 12,
-                                        vy: (Math.random() - 0.5) * 12,
-                                        life: 1, color: '#FFF'
-                                    });
-                                }
-
-                            } else {
-                                setGameState('gameover');
-                            }
-                        }
-                    }
-                }
-
-                if (ent.y > h + 200) entities.current.splice(i, 1);
             }
 
-            // 4. Player
-            const pX = getLaneX(playerX.current, playerScreenY, w, h);
-            const pY = playerScreenY + playerY.current;
+            // Draw Player
+            // Player occupies z=0 approx
+            const playerProj = project(playerX.current, 0, w, h);
+            // Height adjust: map playerY (negative is up) to screen pixels
+            // At z=0, scale=1.
+            const pY = playerProj.y + playerY.current * playerProj.scale;
+            const pSize = 100 * playerProj.scale; // Render size
 
             // Shadow
-            if (playerY.current === GROUND_Y) {
+            if (playerY.current > -5) {
                 ctx.fillStyle = 'rgba(0,0,0,0.5)';
                 ctx.beginPath();
-                ctx.ellipse(pX, pY + 40, 30, 10, 0, 0, Math.PI * 2);
+                ctx.ellipse(playerProj.x, playerProj.y, pSize * 0.3, pSize * 0.1, 0, 0, Math.PI * 2);
                 ctx.fill();
             }
 
-            const duckS = isDucking.current ? 0.5 : 1;
+            // Player Body (Placeholder or simple shape)
+            const duckFactor = isDucking.current ? 0.5 : 1.0;
 
-            // Player Visuals
+            ctx.shadowColor = COLOR_PLAYER;
+            ctx.shadowBlur = 20;
             ctx.fillStyle = COLOR_BG_TOP;
             ctx.strokeStyle = COLOR_PLAYER;
-            ctx.lineWidth = 3;
-            ctx.shadowColor = COLOR_PLAYER;
-            ctx.shadowBlur = 15;
+            ctx.lineWidth = 4;
 
             ctx.beginPath();
-            ctx.moveTo(pX, pY - 40 * duckS); // Tip
-            ctx.lineTo(pX + 30, pY + 20 * duckS);
-            ctx.lineTo(pX, pY + 10 * duckS);
-            ctx.lineTo(pX - 30, pY + 20 * duckS);
+            // Simple triangle/ship shape
+            const halfW = pSize * 0.3;
+            const height = pSize * 0.6 * duckFactor;
+
+            ctx.moveTo(playerProj.x, pY - height); // Tip
+            ctx.lineTo(playerProj.x + halfW, pY);
+            ctx.lineTo(playerProj.x - halfW, pY);
             ctx.closePath();
             ctx.fill();
             ctx.stroke();
 
-            // Engine
-            ctx.shadowBlur = 25;
+            // Engine Glow
             ctx.fillStyle = '#00FFFF';
             ctx.beginPath();
-            ctx.arc(pX, pY + 5 * duckS, 6, 0, Math.PI * 2);
+            ctx.arc(playerProj.x, pY - height * 0.2, 5, 0, Math.PI * 2);
             ctx.fill();
             ctx.shadowBlur = 0;
 
-            // 5. FX
-            for (let i = particles.current.length - 1; i >= 0; i--) {
-                const p = particles.current[i];
-                p.x += p.vx;
-                p.y += p.vy;
-                p.life -= 0.04;
-                if (p.life <= 0) particles.current.splice(i, 1);
-                else {
-                    ctx.globalAlpha = p.life;
-                    ctx.fillStyle = p.color;
-                    ctx.fillRect(p.x, p.y, 3, 3);
-                }
-            }
-            ctx.globalAlpha = 1;
+            // Render Text/Particles if any (overlay)
+            for (const ft of floatTexts.current) {
+                // If text was spawned at entity, we need to track it? 
+                // Currently just drawing in screen space for simplicity
+                // Or stick to fixed screen coords? 
+                // Let's just draw them where they spawned but drift up
 
-            for (let i = floatTexts.current.length - 1; i >= 0; i--) {
-                const ft = floatTexts.current[i];
-                ft.y -= 1.5;
-                ft.life -= 0.02;
-                if (ft.life <= 0) floatTexts.current.splice(i, 1);
-                else {
-                    ctx.fillStyle = `rgba(255, 255, 255, ${ft.opacity})`;
-                    ctx.font = 'bold 24px monospace';
-                    ctx.fillText(ft.text, ft.x, ft.y);
+                // Correction: floatTexts stored x/y as screen coords when spawned?
+                // The spawn logic passed 0,0. Let's fix that.
+                // Actually, let's just show score in HUD.
+                // Re-enable text if we want:
+                if (ft.x === 0 && ft.y === 0) {
+                    // If it's a new text, set it to player position
+                    ft.x = playerProj.x;
+                    ft.y = pY - 50;
                 }
+
+                ctx.fillStyle = `rgba(255, 255, 255, ${ft.opacity})`;
+                ctx.font = 'bold 24px monospace';
+                ctx.fillText(ft.text, ft.x, ft.y);
             }
 
             frameId = requestAnimationFrame(loop);
@@ -482,7 +524,7 @@ export default function BaseRunner() {
             cancelAnimationFrame(frameId);
             window.removeEventListener('resize', resize);
         };
-    }, [gameState, getLaneX, spawnEntity]);
+    }, [gameState, project, spawnEntity]);
 
     return (
         <div style={{
@@ -503,20 +545,18 @@ export default function BaseRunner() {
                 </h1>
             </div>
 
-            {/* Touch Input Zone */}
-            <div
-                style={{ position: 'absolute', inset: 0, zIndex: 5 }}
-                onMouseDown={(e) => {
-                    if (gameState !== 'playing') return;
-                    const x = e.clientX;
-                    playerLane.current = x < window.innerWidth / 2
-                        ? Math.max(0, playerLane.current - 1)
-                        : Math.min(LANE_COUNT - 1, playerLane.current + 1);
-                }}
-            />
+            {/* Controls Info */}
+            <div style={{
+                position: 'absolute', bottom: 20, width: '100%',
+                textAlign: 'center', pointerEvents: 'none', zIndex: 10,
+                color: 'rgba(255,255,255,0.5)', fontSize: '0.9rem'
+            }}>
+                WASD / ARROWS to Move • SPACE to Jump
+            </div>
 
             <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
 
+            {/* Game Over Overlay */}
             {gameState === 'gameover' && (
                 <div style={{
                     position: 'absolute', inset: 0,
@@ -531,6 +571,9 @@ export default function BaseRunner() {
                     }}>
                         GAME OVER
                     </h2>
+                    <p style={{ color: 'white', fontSize: '1.5rem', marginBottom: 30 }}>
+                        Score: {score}
+                    </p>
                     <button
                         onClick={restartGame}
                         style={{
