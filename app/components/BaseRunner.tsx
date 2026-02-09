@@ -58,7 +58,7 @@ export default function BaseRunner() {
 
     // Physics Refs
     const playerLane = useRef(1); // 0, 1, 2
-    const playerX = useRef(1);    // Interpolated lane position (0.0 - 2.0)
+    const playerX = useRef(0.5);  // Interpolated lane position (0.2 - 0.8)
     const playerY = useRef(0);    // Vertical position (0=ground, <0=air)
     const playerVy = useRef(0);   // Vertical velocity
     const isDucking = useRef(false);
@@ -76,18 +76,25 @@ export default function BaseRunner() {
 
     // Project (lane, z) -> Screen Coordinates
     // Removing unused parameters and variables strictly
-    const project = useCallback((lane: number, z: number, w: number, h: number) => {
-        const horizonY = h * 0.35;
+    // Helper: Lane Center X (0..1)
+    const getLaneCenterX = (laneIndex: number) => {
+        // Map 0, 1, 2 -> 0.2, 0.5, 0.8
+        return 0.5 + (laneIndex - 1) * 0.3;
+    };
+
+    // Project (laneX, z) -> Screen Coordinates
+    // laneX is 0..1 (from getLaneCenterX or interpolated)
+    const project = useCallback((laneX: number, z: number, w: number, h: number) => {
         const f = 500;
         const scale = f / (z + f);
+        const yBase = (h * 0.35) + (h - (h * 0.35)) * scale;
 
-        // Map z to y
-        const yBase = horizonY + (h - horizonY) * scale;
-
-        // Lane positioning
-        // Center X is w / 2
-        // Lane offset scales with depth/perspective
-        const x = (w / 2) + ((lane - 1) * (w * 0.35) * scale);
+        // Map laneX (0..1) to screen width with perspective
+        // 0.5 is center. 
+        // deviation = (laneX - 0.5)
+        // x = center + deviation * scale * width
+        // We use w * 0.8 as the "road width at screen" for good spread
+        const x = (w / 2) + ((laneX - 0.5) * (w * 0.8) * scale);
 
         return { x, y: yBase, scale };
     }, []);
@@ -120,7 +127,7 @@ export default function BaseRunner() {
 
     const restartGame = useCallback(() => {
         playerLane.current = 1;
-        playerX.current = 1;
+        playerX.current = 0.5;
         playerY.current = 0;
         playerVy.current = 0;
         isDucking.current = false;
@@ -216,7 +223,8 @@ export default function BaseRunner() {
             // --- Update Physics ---
 
             // Player Lane Smooth
-            playerX.current += (playerLane.current - playerX.current) * LANE_SWITCH_SPEED;
+            const targetX = getLaneCenterX(playerLane.current);
+            playerX.current += (targetX - playerX.current) * LANE_SWITCH_SPEED;
 
             // Player Jump/Gravity
             if (playerY.current < GROUND_Y || playerVy.current !== 0) {
@@ -228,14 +236,16 @@ export default function BaseRunner() {
                 }
             }
 
-            // Speed Curve based on SCORE
-            // Example: +1 speed every 100 points
-            const scoreBasedSpeed = BASE_SPEED + (score / 100);
-            speed.current = Math.min(MAX_SPEED, scoreBasedSpeed);
+            // Speed Curve (Time based for smoothness)
+            // Increase speed very gradually: e.g. +1 every 5s
+            const timeSeconds = (performance.now() - spawnTimer.current) / 1000; // Not quite right logic
+            // Let's just increment slightly every frame
+            if (speed.current < MAX_SPEED) {
+                speed.current += 0.0005; // very slow increase
+            }
 
             // Spawn Logic
             spawnTimer.current += dt;
-            // Spawn interval decreases as speed increases
             const currentInterval = 4000 / speed.current;
             if (spawnTimer.current > currentInterval) {
                 spawnEntity();
@@ -245,44 +255,37 @@ export default function BaseRunner() {
             // Update Entities
             for (let i = entities.current.length - 1; i >= 0; i--) {
                 const ent = entities.current[i];
-                ent.z -= speed.current * 8; // Multiplier to map speed to Z units
+                ent.z -= speed.current * 8;
 
                 if (ent.z < -200) {
-                    // Passed player
                     entities.current.splice(i, 1);
                     continue;
                 }
 
                 // Collision Detection
-                // Player is effectively at z=0, lane=playerX (float), y=playerY
-                // Entity is at ent.z, ent.lane (int)
-                // Check Z proximity
                 if (!ent.collected && ent.z < 50 && ent.z > -50) {
-                    // Check Horizontal: visual overlap
-                    if (Math.abs(ent.lane - playerX.current) < 0.6) {
+                    // Check Horizontal using lane index proximity since visual X is interpolated
+                    // Using normalized X check
+                    const entX = getLaneCenterX(ent.lane);
+                    if (Math.abs(entX - playerX.current) < 0.15) {
 
                         let collision = false;
-
-                        // Constants defining player state
-                        const isJumping = playerY.current < -30; // Significant air time
+                        const isJumping = playerY.current < -30;
                         const isDuckingState = isDucking.current;
 
                         if (ent.type === 'coin') {
                             ent.collected = true;
-                            setScore(s => s + 10);
+                            setScore(s => s + 10); // Update score
+                            // No ref needed for loop speed logic
                             floatTexts.current.push({
                                 text: '+10', x: 0, y: 0, life: 1, opacity: 1
                             });
                         } else if (ent.type === 'eth') {
-                            // ETH Obstacle (Ground) -> Must be JUMPING
-                            if (!isJumping) {
-                                collision = true;
-                            }
+                            // ETH (Ground) -> Collision if NOT Jumping
+                            if (!isJumping) collision = true;
                         } else if (ent.type === 'arch') {
-                            // ARCH Obstacle (High) -> Must be DUCKING
-                            if (!isDuckingState) {
-                                collision = true;
-                            }
+                            // ARCH (Air) -> Collision if NOT Ducking
+                            if (!isDuckingState) collision = true;
                         }
 
                         if (collision) {
@@ -312,10 +315,6 @@ export default function BaseRunner() {
             // --- Render ---
             const w = canvas.width;
             const h = canvas.height;
-            // horizonY is used here for background/rendering
-            // NOTE: We rely on the project() function for lane drawing to keep dry, 
-            // but we might need horizonY for background rects if needed.
-            // Actually, we can get yBase from project for lane lines.
 
             // Background
             const grad = ctx.createLinearGradient(0, 0, 0, h);
@@ -332,8 +331,10 @@ export default function BaseRunner() {
             ctx.beginPath();
 
             for (let i = -0.5; i <= LANE_COUNT - 0.5; i++) {
-                const pNear = project(i + 0.5, 0, w, h); // z=0
-                const pFar = project(i + 0.5, SPAWN_Z, w, h); // z=max
+                // Map logical lane boundaries to normalized X
+                const boundaryNormalizedIndex = 0.5 + (i - 1) * 0.3;
+                const pNear = project(boundaryNormalizedIndex, 0, w, h);
+                const pFar = project(boundaryNormalizedIndex, SPAWN_Z, w, h);
 
                 ctx.moveTo(pNear.x, pNear.y);
                 ctx.lineTo(pFar.x, pFar.y);
@@ -341,17 +342,18 @@ export default function BaseRunner() {
             ctx.stroke();
             ctx.shadowBlur = 0;
 
-            // Draw Entities (Painter's Algo: Far to Near)
+            // Draw Entities
             entities.current.sort((a, b) => b.z - a.z);
 
             for (const ent of entities.current) {
                 if (ent.collected) continue;
 
-                const proj = project(ent.lane, ent.z, w, h);
+                // Use getLaneCenterX to get normalized X for entity
+                const proj = project(getLaneCenterX(ent.lane), ent.z, w, h);
                 const size = 100 * proj.scale;
 
                 if (ent.type === 'coin') {
-                    // Draw Coin
+                    // Coin
                     ctx.shadowColor = COLOR_COIN_BASE;
                     ctx.shadowBlur = 10;
                     ctx.fillStyle = COLOR_COIN_BASE;
@@ -374,6 +376,7 @@ export default function BaseRunner() {
                     ctx.shadowBlur = 20;
 
                     ctx.beginPath();
+                    // Draw diamond at proj.y (ground)
                     ctx.moveTo(proj.x, proj.y - height); // Top
                     ctx.lineTo(proj.x + halfW, proj.y - height / 2); // Right
                     ctx.lineTo(proj.x, proj.y); // Bottom
@@ -409,14 +412,13 @@ export default function BaseRunner() {
                     ctx.fillRect(proj.x - archW / 2, proj.y - archH, archW, legW * 2);
 
                     ctx.shadowBlur = 0;
-
-                    // Warning marker on ground
                     ctx.fillStyle = 'rgba(255,0,0,0.3)';
                     ctx.fillRect(proj.x - archW / 2, proj.y - size * 0.1, archW, size * 0.1);
                 }
             }
 
             // Draw Player
+            // PlayerX is already normalized 0..1
             const playerProj = project(playerX.current, 0, w, h);
             const pY = playerProj.y + playerY.current * playerProj.scale;
             const pSize = 100 * playerProj.scale;
@@ -442,7 +444,7 @@ export default function BaseRunner() {
             const halfW = pSize * 0.3;
             const height = pSize * 0.6 * duckFactor;
 
-            ctx.moveTo(playerProj.x, pY - height); // Tip
+            ctx.moveTo(playerProj.x, pY - height);
             ctx.lineTo(playerProj.x + halfW, pY);
             ctx.lineTo(playerProj.x - halfW, pY);
             ctx.closePath();
