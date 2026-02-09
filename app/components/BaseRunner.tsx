@@ -63,6 +63,10 @@ export default function BaseRunner() {
     const playerVy = useRef(0);   // Vertical velocity
     const isDucking = useRef(false);
 
+    // Derived State
+    const level = Math.floor(score / 100) + 1;
+    const [showInfo, setShowInfo] = useState(false); // Info overlay state
+
     const speed = useRef(BASE_SPEED);
 
     const entities = useRef<Entity[]>([]);
@@ -226,6 +230,10 @@ export default function BaseRunner() {
             const dt = Math.min(time - lastTime.current, 50);
             lastTime.current = time;
 
+            // Dimensions for projection
+            const w = canvas.width;
+            const h = canvas.height;
+
             // --- Update Physics ---
 
             // Player Lane Smooth
@@ -281,9 +289,15 @@ export default function BaseRunner() {
                         if (ent.type === 'coin') {
                             ent.collected = true;
                             setScore(s => s + 10); // Update score
-                            // No ref needed for loop speed logic
+                            // Floating Text: Spawn at coin's screen position
+                            // Use player's current X (interpolated) since we are at collision
+                            const pProj = project(playerX.current, 0, w, h);
                             floatTexts.current.push({
-                                text: '+10', x: 0, y: 0, life: 1, opacity: 1
+                                text: '+10',
+                                x: pProj.x,
+                                y: pProj.y - 50,
+                                life: 1.0,
+                                opacity: 1.0
                             });
                         } else if (ent.type === 'eth') {
                             // ETH (Ground) -> Collision if NOT Jumping
@@ -312,14 +326,14 @@ export default function BaseRunner() {
             // Update Text
             for (let i = floatTexts.current.length - 1; i >= 0; i--) {
                 const ft = floatTexts.current[i];
-                ft.y -= 2;
-                ft.life -= 0.03;
+                ft.y -= 2; // Float up
+                ft.life -= 0.02; // Fade out
+                ft.opacity = Math.max(0, ft.life);
                 if (ft.life <= 0) floatTexts.current.splice(i, 1);
             }
 
             // --- Render ---
-            const w = canvas.width;
-            const h = canvas.height;
+
 
             // Background
             const grad = ctx.createLinearGradient(0, 0, 0, h);
@@ -469,13 +483,10 @@ export default function BaseRunner() {
             ctx.fill();
             ctx.shadowBlur = 0;
 
-            // Render Text
+            // Render Floating Text
+            ctx.textAlign = 'center';
             for (const ft of floatTexts.current) {
-                if (ft.x === 0 && ft.y === 0) {
-                    ft.x = playerProj.x;
-                    ft.y = pY - 50;
-                }
-
+                // Ensure text is measured in screen space
                 ctx.fillStyle = `rgba(255, 255, 255, ${ft.opacity})`;
                 ctx.font = 'bold 24px monospace';
                 ctx.fillText(ft.text, ft.x, ft.y);
@@ -497,20 +508,79 @@ export default function BaseRunner() {
             backgroundColor: COLOR_BG_TOP, overflow: 'hidden',
             fontFamily: 'monospace', userSelect: 'none'
         }}>
-            {/* HUD */}
+            {/* HUD: Top Left (Level & Score) */}
             <div style={{
-                position: 'absolute', top: 30, width: '100%',
-                textAlign: 'center', pointerEvents: 'none', zIndex: 10
+                position: 'absolute', top: 30, left: 30, zIndex: 10,
+                textAlign: 'left'
             }}>
+                <h2 style={{
+                    fontSize: '2rem', margin: 0, color: COLOR_LANE,
+                    textShadow: `0 0 10px ${COLOR_LANE}`
+                }}>
+                    LEVEL {level}
+                </h2>
                 <h1 style={{
                     fontSize: '3rem', margin: 0, color: 'white',
                     textShadow: `0 0 20px ${COLOR_LANE}`
                 }}>
-                    SCORE: {score}
+                    {score}
                 </h1>
             </div>
 
-            {/* Controls Info */}
+            {/* HUD: Top Right (Info Button) */}
+            <div
+                style={{
+                    position: 'absolute', top: 30, right: 30, zIndex: 20,
+                    cursor: 'pointer'
+                }}
+                onMouseEnter={() => setShowInfo(true)}
+                onMouseLeave={() => setShowInfo(false)}
+                onClick={() => setShowInfo(!showInfo)}
+            >
+                <div style={{
+                    width: '40px', height: '40px', borderRadius: '50%',
+                    border: '2px solid white', color: 'white',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontWeight: 'bold', fontSize: '1.2rem',
+                    background: 'rgba(0,0,0,0.5)'
+                }}>
+                    i
+                </div>
+
+                {/* Info Overlay */}
+                {showInfo && (
+                    <div style={{
+                        position: 'absolute', top: '50px', right: 0,
+                        width: '300px', padding: '15px',
+                        background: 'rgba(0, 0, 0, 0.9)',
+                        border: `1px solid ${COLOR_LANE}`,
+                        borderRadius: '8px',
+                        color: 'white', fontSize: '0.9rem',
+                        lineHeight: '1.5',
+                        boxShadow: `0 0 15px ${COLOR_LANE}`
+                    }}>
+                        <p style={{ margin: '0 0 10px 0' }}>Jump: <strong>Space / Up / W</strong></p>
+                        <p style={{ margin: '0 0 10px 0' }}>Duck: <strong>Down / S</strong></p>
+                        <p style={{ margin: 0 }}>Collect Base Coins for Rewards!</p>
+                    </div>
+                )}
+            </div>
+
+            {/* HUD: Bottom Left (Economy) */}
+            <div style={{
+                position: 'absolute', bottom: 30, left: 30, zIndex: 10,
+                textAlign: 'left', color: 'white', fontFamily: 'monospace'
+            }}>
+                <div style={{ fontSize: '1.5rem', marginBottom: '5px' }}>
+                    <span style={{ color: '#0052FF' }}>$FSAP: </span>
+                    {(score * 0.001).toFixed(2)}
+                </div>
+                <div style={{ fontSize: '1.2rem', color: 'rgba(255,255,255,0.7)' }}>
+                    ROLLS: {Math.floor(score / 50)}
+                </div>
+            </div>
+
+            {/* Controls Info (Bottom Center) */}
             <div style={{
                 position: 'absolute', bottom: 20, width: '100%',
                 textAlign: 'center', pointerEvents: 'none', zIndex: 10,
