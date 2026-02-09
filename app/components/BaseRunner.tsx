@@ -77,9 +77,15 @@ export default function BaseRunner() {
     // Project (lane, z) -> Screen Coordinates
     // Removing unused parameters and variables strictly
     // Helper: Lane Center X (0..1)
+    // Helper: Lane Center X (0, 1, 2) -> (0.2, 0.5, 0.8)
     const getLaneCenterX = (laneIndex: number) => {
-        // Map 0, 1, 2 -> 0.2, 0.5, 0.8
-        return 0.5 + (laneIndex - 1) * 0.3;
+        // Explicitly return center of the gaps
+        // Lane 0: 0.2
+        // Lane 1: 0.5
+        // Lane 2: 0.8
+        if (laneIndex === 0) return 0.2;
+        if (laneIndex === 2) return 0.8;
+        return 0.5; // Default/Lane 1
     };
 
     // Project (laneX, z) -> Screen Coordinates
@@ -237,9 +243,8 @@ export default function BaseRunner() {
             }
 
             // Speed Curve (Time based for smoothness)
-            // Increase speed very gradually: e.g. +1 every 5s
-            const timeSeconds = (performance.now() - spawnTimer.current) / 1000; // Not quite right logic
-            // Let's just increment slightly every frame
+            // Increase speed very gradually: e.g. +1 every few seconds equivalent
+            // We use frame-based increment to avoid unused 'time' variables
             if (speed.current < MAX_SPEED) {
                 speed.current += 0.0005; // very slow increase
             }
@@ -330,11 +335,17 @@ export default function BaseRunner() {
             ctx.shadowBlur = 15;
             ctx.beginPath();
 
-            for (let i = -0.5; i <= LANE_COUNT - 0.5; i++) {
-                // Map logical lane boundaries to normalized X
-                const boundaryNormalizedIndex = 0.5 + (i - 1) * 0.3;
-                const pNear = project(boundaryNormalizedIndex, 0, w, h);
-                const pFar = project(boundaryNormalizedIndex, SPAWN_Z, w, h);
+            // Draw 4 lines defining the 3 lanes
+            // Lane 0 is between line 0 and 1
+            // Lane 1 is between line 1 and 2
+            // Lane 2 is between line 2 and 3
+            // Centers are 0.2, 0.5, 0.8. Boundaries are 0.05, 0.35, 0.65, 0.95
+
+            const boundaries = [0.05, 0.35, 0.65, 0.95];
+
+            for (const b of boundaries) {
+                const pNear = project(b, 0, w, h);
+                const pFar = project(b, SPAWN_Z, w, h);
 
                 ctx.moveTo(pNear.x, pNear.y);
                 ctx.lineTo(pFar.x, pFar.y);
