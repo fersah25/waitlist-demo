@@ -2,475 +2,169 @@
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import sdk from '@farcaster/frame-sdk';
 
-// --- Global Constants ---
-const LANE_COUNT = 3;
-const INITIAL_SPEED = 10;
-const MAX_SPEED = 40;
-const LANE_SWITCH_SPEED = 0.2; // Smooth transition factor
-const GRAVITY = 0.8;
-const JUMP_FORCE = -15;
-const GROUND_Y = 0;
-
-// Odyssey / Base Palette
-const COLOR_BG_TOP = '#05051a';
-const COLOR_BG_BOT = '#121245';
-const COLOR_LANE_BORDER = '#00F0FF'; // Neon Cyan
-const COLOR_PLAYER = '#0052FF'; // Base Blue
-const COLOR_OBSTACLE = '#FF003C'; // Neon Red for Arches
-const COLOR_COIN_BASE = '#0052FF'; // Base Blue
-const COLOR_COIN_INNER = '#FFFFFF'; // White Center
-
-// --- Interfaces ---
-interface Entity {
-    id: number;
-    lane: number;
-    y: number;
-    type: 'obstacle' | 'coin';
-    subType?: 'ground' | 'air';
-    collected?: boolean;
-}
-
-interface Particle {
-    x: number;
-    y: number;
-    vx: number;
-    vy: number;
-    life: number;
-    color: string;
-}
-
-interface FloatingText {
-    text: string;
-    x: number;
-    y: number;
-    life: number;
-    opacity: number;
-}
-
 export default function BaseRunner() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
-
-    // React State (HUD)
-    const [score, setScore] = useState(0); // Coins collected * 10
+    const [score, setScore] = useState(0);
     const [gameState, setGameState] = useState<'playing' | 'gameover'>('playing');
 
-    // Game State (Refs)
     const playerLane = useRef(1);
-    const playerX = useRef(1); // Visual X position (0, 1, 2 interpolated)
-    const playerY = useRef(0);
-    const playerVy = useRef(0);
-    const isDucking = useRef(false);
-
-    const speed = useRef(INITIAL_SPEED);
-    const coinsRef = useRef(0); // Internal counter for speed scaling
-
-    const entities = useRef<Entity[]>([]);
-    const particles = useRef<Particle[]>([]);
-    const floatTexts = useRef<FloatingText[]>([]);
-
+    const playerX = useRef(0.5);
+    const entities = useRef<any[]>([]);
     const lastTime = useRef(0);
-    const spawnTimer = useRef(0);
+    const speed = useRef(6);
 
-    // --- Helpers ---
-
-    // Projection Helper: Maps (Lane, Y) -> Screen X
-    const getLaneX = useCallback((laneIndex: number, y: number, w: number, h: number) => {
-        const horizonY = h * 0.35;
-        // Clamp Y to horizon
-        if (y < horizonY) return w / 2;
-
-        const progress = (y - horizonY) / (h - horizonY); // 0 at horizon, 1 at bottom
-
-        // Perspective widths
-        const topW = w * 0.1;
-        const botW = w * 1.0;
-
-        // Lane Width at current Y
-        const currentW = topW + (botW - topW) * progress;
-        const laneUnit = currentW / LANE_COUNT;
-
-        // Center offset: (laneIndex - 1) * laneUnit
-        // Lane 0 -> -1 * unit
-        // Lane 1 -> 0
-        // Lane 2 -> +1 * unit
-        return (w / 2) + (laneIndex - 1) * laneUnit;
-    }, []);
-
-    // --- Core Actions ---
+    const getLaneCenterX = useCallback((lane: number) => (lane * 2 + 1) / 6, []);
 
     const restartGame = useCallback(() => {
         playerLane.current = 1;
-        playerX.current = 1;
-        playerY.current = 0;
-        playerVy.current = 0;
-        isDucking.current = false;
-
-        speed.current = INITIAL_SPEED;
-        coinsRef.current = 0;
-
+        playerX.current = 0.5;
+        speed.current = 6;
         entities.current = [];
-        particles.current = [];
-        floatTexts.current = [];
-
         setScore(0);
         setGameState('playing');
         lastTime.current = performance.now();
     }, []);
 
-    const spawnEntity = useCallback(() => {
-        const lane = Math.floor(Math.random() * LANE_COUNT);
-        const type = Math.random() > 0.6 ? 'obstacle' : 'coin';
-        let subType: 'ground' | 'air' | undefined;
-
-        if (type === 'obstacle') {
-            subType = Math.random() > 0.5 ? 'ground' : 'air';
-        }
-
-        entities.current.push({
-            id: Date.now() + Math.random(),
-            lane,
-            y: -100, // Spawn just above horizon logic
-            type,
-            subType
-        });
-    }, []);
-
-    // --- Init ---
     useEffect(() => {
-        try {
-            if (sdk && sdk.actions) sdk.actions.ready();
-        } catch (e) {
-            console.error(e);
-        }
-    }, []);
-
-    // --- Input (WASD + Arrows) ---
-    useEffect(() => {
+        if (sdk?.actions?.ready) sdk.actions.ready();
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (gameState !== 'playing') return;
-            const k = e.key.toLowerCase();
-
-            // Lane Switch
-            if (k === 'a' || k === 'arrowleft') {
-                playerLane.current = Math.max(0, playerLane.current - 1);
-            }
-            if (k === 'd' || k === 'arrowright') {
-                playerLane.current = Math.min(LANE_COUNT - 1, playerLane.current + 1);
-            }
-
-            // Jump
-            if ((k === 'w' || k === 'arrowup' || k === ' ') && playerY.current === GROUND_Y) {
-                playerVy.current = JUMP_FORCE;
-            }
-
-            // Duck
-            if (k === 's' || k === 'arrowdown') {
-                isDucking.current = true;
-            }
+            if (e.key.toLowerCase() === 'a' || e.key === 'ArrowLeft') playerLane.current = Math.max(0, playerLane.current - 1);
+            if (e.key.toLowerCase() === 'd' || e.key === 'ArrowRight') playerLane.current = Math.min(2, playerLane.current + 1);
         };
-
-        const handleKeyUp = (e: KeyboardEvent) => {
-            const k = e.key.toLowerCase();
-            if (k === 's' || k === 'arrowdown') {
-                isDucking.current = false;
-            }
-        };
-
         window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('keyup', handleKeyUp);
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-            window.removeEventListener('keyup', handleKeyUp);
-        };
-    }, [gameState]);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
 
-    // --- Game Loop ---
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
-        const ctx = canvas.getContext('2d', { alpha: false });
+        const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        const resize = () => {
+        let frameId: number;
+        let spawnTimer = 0;
+
+        // Resize handler - Ekran boyutuna göre canvası ayarlar
+        const handleResize = () => {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
         };
-        window.addEventListener('resize', resize);
-        resize();
-
-        let frameId: number;
+        window.addEventListener('resize', handleResize);
+        handleResize();
 
         const loop = (time: number) => {
             if (gameState !== 'playing') return;
-
-            const dt = Math.min(time - lastTime.current, 50);
+            const dt = time - lastTime.current;
             lastTime.current = time;
 
-            // 1. Physics Update
-            // Smooth lane switching
-            playerX.current += (playerLane.current - playerX.current) * LANE_SWITCH_SPEED;
-
-            // Gravity / Jump
-            if (playerY.current < GROUND_Y || playerVy.current !== 0) {
-                playerY.current += playerVy.current;
-                playerVy.current += GRAVITY;
-                if (playerY.current > GROUND_Y) {
-                    playerY.current = GROUND_Y;
-                    playerVy.current = 0;
-                }
+            speed.current = Math.min(18, speed.current + 0.001);
+            spawnTimer += dt;
+            if (spawnTimer > 1200) {
+                entities.current.push({
+                    id: Math.random(),
+                    lane: Math.floor(Math.random() * 3),
+                    z: 0,
+                    type: Math.random() > 0.4 ? 'obstacle' : 'coin',
+                    collected: false
+                });
+                spawnTimer = 0;
             }
 
-            // Spawning
-            spawnTimer.current += dt;
-            const interval = 6000 / speed.current; // Spawn faster as speed increases
-            if (spawnTimer.current > interval) {
-                spawnEntity();
-                spawnTimer.current = 0;
-            }
+            playerX.current += (getLaneCenterX(playerLane.current) - playerX.current) * 0.15;
 
-            // 2. Render
+            // 1. Arka Plan (Deep Space Gradient)
+            const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            grad.addColorStop(0, '#02020a');
+            grad.addColorStop(1, '#080826');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
             const w = canvas.width;
             const h = canvas.height;
-            const horizonY = h * 0.35;
+            const horizon = h * 0.4;
 
-            // Background: Vertical Gradient (Dark Blue -> Deep Purple/Blue)
-            const grad = ctx.createLinearGradient(0, 0, 0, h);
-            grad.addColorStop(0, COLOR_BG_TOP);
-            grad.addColorStop(1, COLOR_BG_BOT);
-            ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, w, h);
+            // 2. Yol Çizgileri
+            ctx.strokeStyle = '#00F0FF';
+            ctx.lineWidth = 2;
+            [0, 1, 2, 3].forEach(i => {
+                const xBottom = (i / 3) * w;
+                const xTop = w / 2 + (xBottom - w / 2) * 0.1;
+                ctx.beginPath();
+                ctx.moveTo(xTop, horizon);
+                ctx.lineTo(xBottom, h);
+                ctx.stroke();
+            });
 
-            // Draw Road Divider Lines (Neon Cyan)
-            // Only vertical lines, no horizontal grid
-            ctx.lineWidth = 4;
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = COLOR_LANE_BORDER;
-            ctx.strokeStyle = COLOR_LANE_BORDER;
-
-            ctx.beginPath();
-            // We draw lines at -0.5, 0.5, 1.5, 2.5 relative to lane centers
-            for (let i = -0.5; i <= LANE_COUNT - 0.5; i += 1) {
-                const xBot = getLaneX(i, h, w, h);
-                const xTop = getLaneX(i, horizonY, w, h);
-                ctx.moveTo(xBot, h);
-                ctx.lineTo(xTop, horizonY);
-            }
-            ctx.stroke();
-            ctx.shadowBlur = 0;
-
-            // Entities Update & Draw
-            const playerScreenY = h - 150; // Fixed player Y on screen
-
+            // 3. Objeler (Kemerler ve Base Logoları)
             for (let i = entities.current.length - 1; i >= 0; i--) {
                 const ent = entities.current[i];
+                ent.z += speed.current * 0.6;
+                const p = ent.z / 1000;
 
-                // Initialize Y if new spawn
-                if (ent.y === -100) ent.y = horizonY;
-
-                // Move Entity
-                const progress = (ent.y - horizonY) / (h - horizonY);
-                // Non-linear scale for perspective speed effect
-                const scale = 0.1 + (progress * 1.5);
-                ent.y += speed.current * scale;
-
-                const ex = getLaneX(ent.lane, ent.y, w, h);
-                const size = 80 * scale; // Base size
-
-                if (!ent.collected) {
-                    if (ent.type === 'coin') {
-                        // --- COIN: Base Logo (Blue Sphere + White Center) ---
-                        // Outer Glow
-                        ctx.shadowColor = COLOR_COIN_BASE;
-                        ctx.shadowBlur = 20;
-
-                        // Blue Sphere
-                        const g = ctx.createRadialGradient(ex, ent.y, size * 0.1, ex, ent.y, size * 0.5);
-                        g.addColorStop(0, '#4488FF');
-                        g.addColorStop(1, COLOR_COIN_BASE);
-                        ctx.fillStyle = g;
-
-                        ctx.beginPath();
-                        ctx.arc(ex, ent.y, size / 2, 0, Math.PI * 2);
-                        ctx.fill();
-
-                        // Inner White Circle
-                        ctx.fillStyle = COLOR_COIN_INNER;
-                        ctx.beginPath();
-                        ctx.arc(ex, ent.y, size / 4, 0, Math.PI * 2);
-                        ctx.fill();
-
-                        ctx.shadowBlur = 0;
-
-                        // Sparkle Effect
-                        if (Math.random() > 0.9) {
-                            ctx.fillStyle = '#FFF';
-                            ctx.globalAlpha = Math.random();
-                            const sx = ex + (Math.random() - 0.5) * size;
-                            const sy = ent.y + (Math.random() - 0.5) * size;
-                            ctx.fillRect(sx, sy, 3, 3);
-                            ctx.globalAlpha = 1.0;
-                        }
-
-                    } else {
-                        // --- OBSTACLE: Neon Arch ---
-                        // Gate-like structure: Two pillars + Top Bar
-                        const pillarW = size * 0.15;
-                        const archH = size * 1.2;
-                        const archW = size * 0.8;
-
-                        // Y position depends on if it's Ground or Air obstacle
-                        // Ground: Base is at ent.y
-                        // Air: Base is higher up
-                        const baseY = ent.subType === 'air' ? ent.y - (140 * scale) : ent.y;
-
-                        ctx.fillStyle = COLOR_OBSTACLE;
-                        ctx.shadowColor = COLOR_OBSTACLE;
-                        ctx.shadowBlur = 15 + Math.random() * 5; // Pulsing glow
-
-                        // Draw Pillars
-                        // Left
-                        ctx.fillRect(ex - archW / 2, baseY - archH, pillarW, archH);
-                        // Right
-                        ctx.fillRect(ex + archW / 2 - pillarW, baseY - archH, pillarW, archH);
-                        // Top Bar
-                        ctx.fillRect(ex - archW / 2, baseY - archH, archW, pillarW);
-
-                        ctx.shadowBlur = 0;
-                    }
-                }
-
-                // Collision Detection
-                // Simple box distance check in 2D projection
-                if (!ent.collected && Math.abs(ent.y - playerScreenY) < 40) {
-                    const pCx = getLaneX(playerX.current, playerScreenY, w, h);
-
-                    // Horizontal hit check
-                    if (Math.abs(ex - pCx) < 50) {
-                        let hit = false;
-                        if (ent.type === 'coin') {
-                            hit = true; // Always collect coins if touched
-                        } else {
-                            // Obstacle Logic
-                            if (ent.subType === 'air') {
-                                // Must duck
-                                if (!isDucking.current) hit = true;
-                            } else {
-                                // Must jump (ground obstacle)
-                                if (playerY.current > -50) hit = true;
-                            }
-                        }
-
-                        if (hit) {
-                            if (ent.type === 'coin') {
-                                ent.collected = true;
-                                const newCoins = coinsRef.current + 1;
-                                coinsRef.current = newCoins;
-
-                                // Score increases by 10 per coin
-                                setScore(s => s + 10);
-
-                                // Speed Up every 5 coins
-                                if (newCoins % 5 === 0) {
-                                    speed.current = Math.min(MAX_SPEED, speed.current + 0.5);
-                                }
-
-                                // Floating Text +10
-                                floatTexts.current.push({
-                                    text: '+10',
-                                    x: ex,
-                                    y: ent.y - 50,
-                                    life: 1,
-                                    opacity: 1
-                                });
-
-                                // Particles explosion
-                                for (let p = 0; p < 8; p++) {
-                                    particles.current.push({
-                                        x: ex, y: ent.y,
-                                        vx: (Math.random() - 0.5) * 15,
-                                        vy: (Math.random() - 0.5) * 15,
-                                        life: 1,
-                                        color: COLOR_COIN_INNER // White sparkles
-                                    });
-                                }
-                            } else {
-                                // Hit Obstacle -> Game Over
-                                setGameState('gameover');
-                            }
-                        }
-                    }
-                }
-
-                // Cleanup if off-screen
-                if (ent.y > h + 200) {
+                if (p > 1) {
                     entities.current.splice(i, 1);
+                    continue;
+                }
+
+                const size = (w * 0.22) * p;
+                const xPos = (w / 2) + (getLaneCenterX(ent.lane) - 0.5) * w * p;
+                const yPos = horizon + (h - horizon) * p;
+
+                // Çarpışma Testi
+                if (p > 0.8 && p < 0.9 && ent.lane === playerLane.current) {
+                    if (ent.type === 'obstacle') {
+                        setGameState('gameover');
+                    } else if (!ent.collected) {
+                        ent.collected = true;
+                        setScore(s => s + 10);
+                    }
+                }
+
+                if (ent.collected) continue;
+
+                if (ent.type === 'obstacle') {
+                    // NEON KEMER (Ref resmindeki gibi)
+                    ctx.save();
+                    ctx.strokeStyle = '#FF0420';
+                    ctx.lineWidth = 4 + (p * 4);
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = '#FF0420';
+                    ctx.beginPath();
+                    ctx.moveTo(xPos - size / 2, yPos);
+                    ctx.lineTo(xPos - size / 2, yPos - size);
+                    ctx.lineTo(xPos + size / 2, yPos - size);
+                    ctx.lineTo(xPos + size / 2, yPos);
+                    ctx.stroke();
+                    ctx.restore();
+                } else {
+                    // BASE LOGO COIN
+                    ctx.save();
+                    ctx.fillStyle = '#0052FF';
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = '#0052FF';
+                    ctx.beginPath();
+                    ctx.arc(xPos, yPos - size / 4, size / 3, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = 'white';
+                    ctx.beginPath();
+                    ctx.arc(xPos, yPos - size / 4, size / 8, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
                 }
             }
 
-            // 3. Draw Player
-            const pX = getLaneX(playerX.current, playerScreenY, w, h);
-            const pY = playerScreenY + playerY.current;
-
-            // Shadow
-            if (playerY.current === GROUND_Y) {
-                ctx.fillStyle = 'rgba(0,0,0,0.5)';
-                ctx.beginPath();
-                ctx.ellipse(pX, pY + 30, 25, 10, 0, 0, Math.PI * 2);
-                ctx.fill();
-            }
-
-            // Player Ship / Character
-            const duckS = isDucking.current ? 0.6 : 1;
-            ctx.fillStyle = COLOR_PLAYER;
-            ctx.shadowColor = COLOR_PLAYER;
-            ctx.shadowBlur = 20;
-
+            // 4. Oyuncu (Senin karakterin)
+            const pX = playerX.current * w;
+            const pY = h * 0.85;
+            ctx.save();
+            ctx.fillStyle = '#0052FF';
             ctx.beginPath();
-            // Simple sleek ship shape
-            ctx.moveTo(pX, pY - 30 * duckS);
-            ctx.lineTo(pX + 25, pY + 20 * duckS);
-            ctx.lineTo(pX, pY + 10 * duckS); // Tail indent
-            ctx.lineTo(pX - 25, pY + 20 * duckS);
-            ctx.closePath();
+            ctx.arc(pX, pY, 25, 0, Math.PI * 2);
             ctx.fill();
-
-            // Engine Glow
-            ctx.fillStyle = '#00FFFF';
-            ctx.beginPath();
-            ctx.arc(pX, pY + 15 * duckS, 5, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.shadowBlur = 0;
-
-
-            // 4. FX (Particles & Floating Text)
-            for (let i = particles.current.length - 1; i >= 0; i--) {
-                const p = particles.current[i];
-                p.x += p.vx;
-                p.y += p.vy;
-                p.life -= 0.05;
-
-                if (p.life <= 0) particles.current.splice(i, 1);
-                else {
-                    ctx.globalAlpha = p.life;
-                    ctx.fillStyle = p.color;
-                    ctx.fillRect(p.x, p.y, 4, 4);
-                }
-            }
-            ctx.globalAlpha = 1;
-
-            for (let i = floatTexts.current.length - 1; i >= 0; i--) {
-                const ft = floatTexts.current[i];
-                ft.y -= 2;
-                ft.life -= 0.02;
-
-                if (ft.life <= 0) floatTexts.current.splice(i, 1);
-                else {
-                    ctx.fillStyle = `rgba(255, 255, 255, ${ft.opacity})`;
-                    ctx.font = 'bold 24px Arial';
-                    ctx.fillText(ft.text, ft.x, ft.y);
-                }
-            }
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            ctx.restore();
 
             frameId = requestAnimationFrame(loop);
         };
@@ -478,80 +172,35 @@ export default function BaseRunner() {
         frameId = requestAnimationFrame(loop);
         return () => {
             cancelAnimationFrame(frameId);
-            window.removeEventListener('resize', resize);
+            window.removeEventListener('resize', handleResize);
         };
-    }, [gameState, getLaneX, spawnEntity]);
+    }, [gameState, getLaneCenterX]);
 
-    // --- Render Rendering ---
     return (
-        <div style={{
-            position: 'relative', width: '100vw', height: '100vh',
-            backgroundColor: COLOR_BG_BOT, overflow: 'hidden',
-            fontFamily: 'sans-serif', userSelect: 'none'
-        }}>
-            {/* HUD */}
+        <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', background: '#02020a' }}>
             <div style={{
-                position: 'absolute', top: 20, width: '100%',
-                display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 10
+                position: 'absolute', top: 30, width: '100%', textAlign: 'center',
+                color: 'white', fontSize: '2.5rem', fontWeight: 'bold', zIndex: 10,
+                textShadow: '0 0 10px rgba(0,240,255,0.7)'
             }}>
-                <div style={{
-                    background: 'rgba(0,0,0,0.6)', padding: '10px 40px',
-                    borderRadius: '30px', border: `2px solid ${COLOR_LANE_BORDER}`,
-                    boxShadow: `0 0 15px ${COLOR_LANE_BORDER}`
-                }}>
-                    <h1 style={{
-                        fontSize: '2.5rem', margin: 0, color: 'white',
-                        textShadow: `0 0 10px ${COLOR_PLAYER}`, fontFamily: 'monospace'
-                    }}>
-                        SCORE: {score}
-                    </h1>
-                </div>
+                {score}
             </div>
-
-            {/* Input Overlay (Mobile Touch Zones) */}
-            <div
-                style={{ position: 'absolute', inset: 0, zIndex: 5 }}
-                onMouseDown={(e) => {
-                    const x = e.clientX;
-                    if (gameState !== 'playing') return;
-                    playerLane.current = x < window.innerWidth / 2
-                        ? Math.max(0, playerLane.current - 1)
-                        : Math.min(LANE_COUNT - 1, playerLane.current + 1);
-                }}
-            />
-
             <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
-
-            {/* Game Over Screen */}
             {gameState === 'gameover' && (
                 <div style={{
-                    position: 'absolute', inset: 0,
-                    background: 'rgba(0,0,0,0.85)',
-                    display: 'flex', flexDirection: 'column',
-                    alignItems: 'center', justifyContent: 'center',
-                    zIndex: 20
+                    position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.85)',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 100
                 }}>
-                    <h2 style={{
-                        fontSize: '4rem', color: COLOR_OBSTACLE,
-                        textShadow: `0 0 20px ${COLOR_OBSTACLE}`,
-                        marginBottom: '10px', fontFamily: 'monospace'
-                    }}>
-                        MISSION FAILED
-                    </h2>
-                    <p style={{ color: 'white', fontSize: '2rem', marginBottom: 40 }}>FINAL SCORE: {score}</p>
+                    <h1 style={{ color: '#FF0420', fontSize: '3rem', marginBottom: '20px' }}>CRASHED</h1>
                     <button
                         onClick={restartGame}
                         style={{
-                            background: COLOR_PLAYER, color: 'white',
-                            border: `2px solid ${COLOR_LANE_BORDER}`,
-                            padding: '15px 60px',
-                            fontSize: '1.5rem', borderRadius: '50px',
-                            cursor: 'pointer', textTransform: 'uppercase',
-                            letterSpacing: '2px', fontWeight: 'bold',
-                            boxShadow: `0 0 20px ${COLOR_PLAYER}`
+                            padding: '12px 40px', fontSize: '1.5rem', cursor: 'pointer',
+                            background: '#0052FF', color: 'white', border: 'none', borderRadius: '30px',
+                            boxShadow: '0 0 20px rgba(0,82,255,0.5)'
                         }}
                     >
-                        Retry Mission
+                        RETRY
                     </button>
                 </div>
             )}
