@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 // Types for GoPlus Response
 interface GoPlusTokenSecurity {
@@ -59,8 +59,6 @@ const BaseShield: React.FC = () => {
     // Constants
     const CHAIN_ID = '8453'; // Base Network
 
-    // Reset analysis only when starting a new scan, handled in checkToken
-
     const checkToken = async () => {
         // 1. Address Normalization
         const normalizedAddress = contractAddress.trim().toLowerCase();
@@ -78,12 +76,11 @@ const BaseShield: React.FC = () => {
 
         // Define Parallel Tasks
 
-        // Task A: DEXScreener Fetch
+        // Task A: DEXScreener Fetch (Official Endpoint & Deep Safety)
         const fetchDex = async () => {
             try {
                 const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${normalizedAddress}`);
 
-                // Handle HTTP errors gracefully
                 if (!response.ok) {
                     console.warn(`DEXScreener API error: ${response.status}`);
                     return null;
@@ -91,10 +88,10 @@ const BaseShield: React.FC = () => {
 
                 const data: DexScreenerResponse = await response.json();
 
-                // Strict Safety Check as requested
+                // Deep Safety Check
                 if (!data || !data.pairs || data.pairs.length === 0) {
-                    // No pools found - logical explicit handling
-                    console.log('No liquidity pools found for this token.');
+                    // Log but don't crash. UI handles null dexData.
+                    console.log('No liquidity pairs found on DEXScreener.');
                     return null;
                 }
 
@@ -104,14 +101,10 @@ const BaseShield: React.FC = () => {
                 if (basePair) {
                     return basePair;
                 } else {
-                    // Fallback to first pair if Base specific not found? 
-                    // Prompt implies specific filter, but let's be safe and return first valid if base not found
-                    // to not show empty if it exists elsewhere. 
-                    // However, strict prompt says "Filter for the Base network specifically".
-                    // If not on Base, maybe return null to be strict?
-                    // Let's stick to the prompt's request for Base but fall back to [0] commonly in implementation unless strictly forbidden.
-                    // "Filter for the Base network specifically: const basePair = data.pairs.find(p => p.chainId === 'base');"
-                    return basePair || null;
+                    // Fallback: If not on Base, maybe return null to be strict as requested?
+                    // User prompt: "Filter for the Base network specifically: const basePair = data.pairs.find(p => p.chainId === 'base');"
+                    // Whatever happens, we just return what we found or null.
+                    return null;
                 }
 
             } catch (err) {
@@ -120,7 +113,7 @@ const BaseShield: React.FC = () => {
             }
         };
 
-        // Task B: GoPlus Security Fetch
+        // Task B: GoPlus Security Fetch (Independent)
         const fetchSecurity = async () => {
             try {
                 const response = await fetch(`https://api.gopluslabs.io/api/v1/token_security/${CHAIN_ID}?contract_addresses=${normalizedAddress}`);
@@ -151,17 +144,21 @@ const BaseShield: React.FC = () => {
             if (dexResult) {
                 setDexData(dexResult);
             } else {
-                // If no DEX data, we don't error out yet, we check security
+                // If DEX failed or no pairs, we do nothing (dexData remains null)
+                // Optional: set a specific error if desired, but prompt says "show 'N/A'" implies specific UI handling
+                // We handle this in UI rendering.
             }
 
             // Handle Security Results
             if (securityResult) {
                 calculateTrustScore(securityResult);
             } else {
-                // If neither found
+                // Determine Error Message
                 if (!dexResult) {
+                    // Nothing found
                     setError('No token data found. This address may be a wallet or unlisted.');
                 } else {
+                    // Dex found, Security failed
                     setError('Security data unavailable, but token market data found.');
                 }
             }
@@ -380,11 +377,7 @@ const BaseShield: React.FC = () => {
                             )}
                         </div>
                     </div>
-                ) : (
-                    // If analysis exists but no dexdata (e.g. unlisted but security checked), show a placeholder or nothing?
-                    // Currently showing nothing for dex data if null.
-                    null
-                )}
+                ) : null}
 
                 {/* Security Dashboard */}
                 {analysis && (
