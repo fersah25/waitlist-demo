@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -77,8 +76,12 @@ const BaseShield: React.FC = () => {
             }
 
             calculateTrustScore(tokenData);
-        } catch (err: any) {
-            setError(err.message || 'An error occurred while fetching data.');
+        } catch (err: unknown) {
+            if (err instanceof Error) {
+                setError(err.message);
+            } else {
+                setError('An unknown error occurred while fetching data.');
+            }
         } finally {
             setLoading(false);
         }
@@ -86,7 +89,6 @@ const BaseShield: React.FC = () => {
 
     const calculateTrustScore = (data: GoPlusTokenSecurity) => {
         let score = 100;
-        const deductions: string[] = [];
 
         // 1. Honeypot Check
         if (data.is_honeypot === '1') {
