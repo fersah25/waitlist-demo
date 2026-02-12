@@ -163,78 +163,129 @@ const BaseShield: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-[#0a0b0d] text-white flex flex-col items-center p-4 font-sans">
-            <div className="w-full max-w-md space-y-6">
+        <div style={{
+            backgroundColor: '#0a0b0d',
+            color: 'white',
+            minHeight: '100vh',
+            padding: '20px',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
+        }}>
+            <div style={{ maxWidth: '420px', margin: '0 auto' }}>
 
                 {/* Header */}
-                <header className="flex flex-col items-center justify-center pt-8 pb-4">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="relative">
-                            <div className="absolute inset-0 bg-blue-500 blur-lg opacity-20 rounded-full"></div>
-                            <span className="relative text-3xl">🛡️</span>
-                        </div>
-                        <h1 className="text-3xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-white drop-shadow-[0_0_10px_rgba(59,130,246,0.5)]">
-                            BaseShield
-                        </h1>
-                    </div>
-                    <p className="text-zinc-500 text-sm font-medium tracking-wide uppercase">Elite Security Scanner</p>
-                </header>
-
-                {/* Input Area */}
-                <div className="bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800 shadow-xl backdrop-blur-sm">
-                    <div className="flex items-center gap-2">
-                        <div className="flex-1 bg-zinc-950/80 rounded-xl flex items-center px-4 py-3 border border-zinc-800 focus-within:border-blue-500/50 transition-colors">
-                            <input
-                                type="text"
-                                value={contractAddress}
-                                onChange={(e) => setContractAddress(e.target.value)}
-                                placeholder="Paste format 0x..."
-                                className="w-full bg-transparent text-white placeholder-zinc-600 outline-none font-mono text-sm"
-                            />
-                        </div>
-                        <button
-                            onClick={fetchSecurityData}
-                            disabled={loading}
-                            className={`px-6 py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-blue-900/20 transition-all ${loading
-                                    ? 'bg-zinc-800 text-zinc-500 cursor-wait'
-                                    : 'bg-[#0052FF] hover:bg-[#004ad9] hover:shadow-blue-600/30 text-white active:scale-95'
-                                }`}
-                        >
-                            {loading ? (
-                                <span className="flex items-center gap-2">
-                                    <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
-                                </span>
-                            ) : 'SCAN'}
-                        </button>
-                    </div>
+                <div style={{ textAlign: 'center', paddingTop: '40px', paddingBottom: '30px' }}>
+                    <h1 style={{
+                        fontSize: '32px',
+                        fontWeight: '800',
+                        margin: '0 0 8px 0',
+                        background: 'linear-gradient(to right, #60a5fa, #ffffff)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                        display: 'inline-block'
+                    }}>
+                        🛡️ BaseShield
+                    </h1>
+                    <p style={{
+                        color: '#71717a',
+                        fontSize: '12px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '2px',
+                        fontWeight: '600',
+                        marginTop: '0'
+                    }}>
+                        Elite Security Scanner
+                    </p>
                 </div>
 
-                {error && (
-                    <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-xl text-sm flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
-                        <span>⚠️</span> {error}
+                {/* Input Area */}
+                <div style={{
+                    backgroundColor: 'rgba(24, 24, 27, 0.5)',
+                    padding: '8px',
+                    borderRadius: '16px',
+                    border: '1px solid #27272a',
+                    marginBottom: '24px',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.4)'
+                }}>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <input
+                            type="text"
+                            value={contractAddress}
+                            onChange={(e) => setContractAddress(e.target.value)}
+                            placeholder="Paste format 0x..."
+                            style={{
+                                flex: 1,
+                                backgroundColor: '#09090b',
+                                color: 'white',
+                                border: '1px solid #0052FF',
+                                borderRadius: '12px',
+                                padding: '14px',
+                                fontSize: '14px',
+                                fontFamily: 'monospace',
+                                outline: 'none'
+                            }}
+                        />
                     </div>
-                )}
+                    <button
+                        onClick={fetchSecurityData}
+                        disabled={loading}
+                        style={{
+                            backgroundColor: '#0052FF',
+                            color: 'white',
+                            fontWeight: 'bold',
+                            border: 'none',
+                            borderRadius: '12px',
+                            padding: '14px',
+                            width: '100%',
+                            marginTop: '8px',
+                            cursor: loading ? 'wait' : 'pointer',
+                            opacity: loading ? 0.7 : 1,
+                            fontSize: '14px',
+                            transition: 'all 0.2s ease'
+                        }}
+                    >
+                        {loading ? 'SCANNING...' : 'SCAN'}
+                    </button>
+                    {error && (
+                        <div style={{
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.2)',
+                            color: '#f87171',
+                            padding: '12px',
+                            borderRadius: '12px',
+                            marginTop: '12px',
+                            fontSize: '13px'
+                        }}>
+                            ⚠️ {error}
+                        </div>
+                    )}
+                </div>
 
-                {/* Main Content Area */}
+                {/* Empty State */}
                 {!analysis && !loading && !dexData && (
-                    <div className="flex flex-col items-center justify-center py-20 text-zinc-700 animate-in fade-in duration-700">
-                        <span className="text-6xl mb-4 opacity-50 grayscale">🔍</span>
-                        <p className="text-zinc-600 font-medium">Ready to scan Base Network</p>
+                    <div style={{ textAlign: 'center', padding: '60px 0', opacity: 0.5 }}>
+                        <div style={{ fontSize: '64px', marginBottom: '16px', filter: 'grayscale(1)' }}>🔍</div>
+                        <p style={{ color: '#71717a', fontWeight: '500' }}>Ready to scan Base Network</p>
                     </div>
                 )}
 
                 {/* Token Found Card */}
                 {dexData && (
-                    <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 relative overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 blur-3xl rounded-full -mr-10 -mt-10 pointer-events-none"></div>
-
-                        <div className="relative z-10 flex justify-between items-start">
+                    <div style={{
+                        backgroundColor: '#16181d',
+                        border: '1px solid #27272a',
+                        borderRadius: '16px',
+                        padding: '20px',
+                        marginBottom: '20px',
+                        position: 'relative',
+                        overflow: 'hidden'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
                             <div>
-                                <h3 className="text-2xl font-bold text-white tracking-tight">{dexData.baseToken.name}</h3>
-                                <div className="flex items-center gap-2 text-zinc-400 mt-1">
-                                    <span className="font-bold text-blue-400">${dexData.baseToken.symbol}</span>
+                                <h3 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0 0 4px 0', color: 'white' }}>{dexData.baseToken.name}</h3>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ color: '#60a5fa', fontWeight: 'bold' }}>${dexData.baseToken.symbol}</span>
                                     {dexData.priceUsd && (
-                                        <span className="text-xs bg-zinc-800 px-2 py-0.5 rounded text-zinc-500">
+                                        <span style={{ backgroundColor: '#27272a', color: '#a1a1aa', padding: '2px 6px', borderRadius: '4px', fontSize: '11px' }}>
                                             ${parseFloat(dexData.priceUsd).toFixed(6)}
                                         </span>
                                     )}
@@ -242,10 +293,16 @@ const BaseShield: React.FC = () => {
                             </div>
 
                             {dexData.liquidity?.usd !== undefined && (
-                                <div className={`px-3 py-1.5 rounded-lg border text-xs font-bold tracking-wide uppercase ${dexData.liquidity.usd > 10000
-                                        ? 'bg-green-500/10 border-green-500/20 text-green-400'
-                                        : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400'
-                                    }`}>
+                                <div style={{
+                                    padding: '6px 10px',
+                                    borderRadius: '8px',
+                                    fontSize: '11px',
+                                    fontWeight: 'bold',
+                                    textTransform: 'uppercase',
+                                    backgroundColor: dexData.liquidity.usd > 10000 ? 'rgba(74, 222, 128, 0.1)' : 'rgba(250, 204, 21, 0.1)',
+                                    color: dexData.liquidity.usd > 10000 ? '#4ade80' : '#facc15',
+                                    border: `1px solid ${dexData.liquidity.usd > 10000 ? 'rgba(74, 222, 128, 0.2)' : 'rgba(250, 204, 21, 0.2)'}`
+                                }}>
                                     Liq: ${(dexData.liquidity.usd / 1000).toFixed(1)}K
                                 </div>
                             )}
@@ -255,95 +312,99 @@ const BaseShield: React.FC = () => {
 
                 {/* Security Dashboard */}
                 {analysis && (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-100">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
                         {/* Trust Score Card */}
-                        <div className="bg-gradient-to-b from-zinc-900 to-[#0a0b0d] border border-zinc-800 rounded-3xl p-6 text-center relative overflow-hidden">
-                            {/* Glowing Background for Score */}
-                            <div className={`absolute inset-0 opacity-10 blur-2xl ${analysis.trustScore >= 80 ? 'bg-green-500' :
-                                    analysis.trustScore >= 50 ? 'bg-yellow-500' : 'bg-red-500'
-                                }`}></div>
-
-                            <div className="relative z-10">
-                                <h3 className="text-zinc-500 text-xs font-bold uppercase tracking-widest mb-4">Trust Score</h3>
-                                <div className={`text-6xl font-black tracking-tighter mb-2 ${analysis.trustScore >= 80 ? 'text-green-400 drop-shadow-[0_0_15px_rgba(74,222,128,0.3)]' :
-                                        analysis.trustScore >= 50 ? 'text-yellow-400' :
-                                            'text-red-500'
-                                    }`}>
-                                    {analysis.trustScore}
-                                </div>
-                                <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden max-w-[200px] mx-auto">
-                                    <div
-                                        className={`h-full rounded-full transition-all duration-1000 ease-out ${analysis.trustScore >= 80 ? 'bg-green-500' :
-                                                analysis.trustScore >= 50 ? 'bg-yellow-500' : 'bg-red-500'
-                                            }`}
-                                        style={{ width: `${analysis.trustScore}%` }}
-                                    ></div>
-                                </div>
+                        <div style={{
+                            background: 'linear-gradient(to bottom, #18181b, #0a0b0d)',
+                            border: '1px solid #27272a',
+                            borderRadius: '24px',
+                            padding: '24px',
+                            textAlign: 'center',
+                            position: 'relative',
+                            overflow: 'hidden'
+                        }}>
+                            <div style={{ fontSize: '10px', color: '#71717a', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '16px' }}>Trust Score</div>
+                            <div style={{
+                                fontSize: '56px',
+                                fontWeight: '900',
+                                lineHeight: '1',
+                                marginBottom: '16px',
+                                color: analysis.trustScore >= 80 ? '#4ade80' : analysis.trustScore >= 50 ? '#facc15' : '#ef4444',
+                                textShadow: analysis.trustScore >= 80 ? '0 0 20px rgba(74, 222, 128, 0.3)' : 'none'
+                            }}>
+                                {analysis.trustScore}
+                            </div>
+                            <div style={{ height: '6px', width: '100%', backgroundColor: '#27272a', borderRadius: '999px', overflow: 'hidden', maxWidth: '200px', margin: '0 auto' }}>
+                                <div style={{
+                                    height: '100%',
+                                    width: `${analysis.trustScore}%`,
+                                    backgroundColor: analysis.trustScore >= 80 ? '#4ade80' : analysis.trustScore >= 50 ? '#facc15' : '#ef4444',
+                                    borderRadius: '999px',
+                                    transition: 'width 1s ease-out'
+                                }}></div>
                             </div>
                         </div>
 
                         {/* Status Grid */}
-                        <div className="grid grid-cols-2 gap-3">
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                             {/* Honeypot */}
-                            <div className={`p-4 rounded-2xl border ${analysis.details.is_honeypot === '1'
-                                    ? 'bg-red-500/10 border-red-500/20'
-                                    : 'bg-green-500/10 border-green-500/20'
-                                }`}>
-                                <div className="text-xs text-zinc-500 uppercase font-bold mb-1">Honeypot</div>
-                                <div className={`text-lg font-bold ${analysis.details.is_honeypot === '1' ? 'text-red-400' : 'text-green-400'
-                                    }`}>
+                            <div style={{
+                                padding: '16px',
+                                borderRadius: '16px',
+                                border: '1px solid',
+                                backgroundColor: analysis.details.is_honeypot === '1' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(74, 222, 128, 0.1)',
+                                borderColor: analysis.details.is_honeypot === '1' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(74, 222, 128, 0.2)'
+                            }}>
+                                <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>Honeypot</div>
+                                <div style={{ fontSize: '18px', fontWeight: 'bold', color: analysis.details.is_honeypot === '1' ? '#f87171' : '#4ade80' }}>
                                     {analysis.details.is_honeypot === '1' ? 'DETECTED' : 'SAFE'}
                                 </div>
                             </div>
 
                             {/* Taxes */}
-                            <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-2xl">
-                                <div className="text-xs text-zinc-500 uppercase font-bold mb-1">Buy / Sell Tax</div>
-                                <div className="text-lg font-bold text-white flex gap-1">
-                                    <span className={parseFloat(analysis.details.buy_tax) > 0.1 ? 'text-red-400' : 'text-zinc-300'}>
-                                        {(parseFloat(analysis.details.buy_tax) * 100).toFixed(0)}%
-                                    </span>
-                                    <span className="text-zinc-600">/</span>
-                                    <span className={parseFloat(analysis.details.sell_tax) > 0.1 ? 'text-red-400' : 'text-zinc-300'}>
-                                        {(parseFloat(analysis.details.sell_tax) * 100).toFixed(0)}%
-                                    </span>
+                            <div style={{ backgroundColor: 'rgba(24, 24, 27, 0.5)', border: '1px solid #27272a', padding: '16px', borderRadius: '16px' }}>
+                                <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>Buy / Sell Tax</div>
+                                <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'white' }}>
+                                    <span style={{ color: parseFloat(analysis.details.buy_tax) > 0.1 ? '#f87171' : '#d4d4d8' }}>{(parseFloat(analysis.details.buy_tax) * 100).toFixed(0)}%</span>
+                                    <span style={{ color: '#52525b', margin: '0 4px' }}>/</span>
+                                    <span style={{ color: parseFloat(analysis.details.sell_tax) > 0.1 ? '#f87171' : '#d4d4d8' }}>{(parseFloat(analysis.details.sell_tax) * 100).toFixed(0)}%</span>
                                 </div>
                             </div>
 
                             {/* Contract */}
-                            <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-2xl">
-                                <div className="text-xs text-zinc-500 uppercase font-bold mb-1">Contract</div>
-                                <div className="text-lg font-bold text-white">
+                            <div style={{ backgroundColor: 'rgba(24, 24, 27, 0.5)', border: '1px solid #27272a', padding: '16px', borderRadius: '16px' }}>
+                                <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>Contract</div>
+                                <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'white' }}>
                                     {analysis.details.is_proxy === '1' ? (
-                                        <span className="text-yellow-400">Proxy</span>
+                                        <span style={{ color: '#facc15' }}>Proxy</span>
                                     ) : (
-                                        <span className="text-zinc-300">Standard</span>
+                                        <span style={{ color: '#d4d4d8' }}>Standard</span>
                                     )}
                                 </div>
                             </div>
 
                             {/* Ownership */}
-                            <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-2xl">
-                                <div className="text-xs text-zinc-500 uppercase font-bold mb-1">Ownership</div>
-                                <div className="text-lg font-bold text-white">
+                            <div style={{ backgroundColor: 'rgba(24, 24, 27, 0.5)', border: '1px solid #27272a', padding: '16px', borderRadius: '16px' }}>
+                                <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>Ownership</div>
+                                <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'white' }}>
                                     {(!analysis.details.owner_address || analysis.details.owner_address === '0x0000000000000000000000000000000000000000') ? (
-                                        <span className="text-green-400">Renounced</span>
+                                        <span style={{ color: '#4ade80' }}>Renounced</span>
                                     ) : (
-                                        <span className="text-yellow-400">Owner Active</span>
+                                        <span style={{ color: '#facc15' }}>Active</span>
                                     )}
                                 </div>
                             </div>
                         </div>
 
                         {/* Raw Data Toggle */}
-                        <div className="pt-4">
-                            <details className="group">
-                                <summary className="list-none text-center cursor-pointer text-xs text-zinc-600 hover:text-zinc-400 transition-colors">
+                        <div style={{ marginTop: '16px' }}>
+                            <details style={{ cursor: 'pointer' }}>
+                                <summary style={{ listStyle: 'none', textAlign: 'center', fontSize: '12px', color: '#52525b', padding: '8px' }}>
                                     View Raw Data
                                 </summary>
-                                <div className="mt-4 p-4 bg-black rounded-xl border border-zinc-800 overflow-hidden">
-                                    <pre className="text-[10px] text-green-500 font-mono overflow-auto max-h-40">
+                                <div style={{ marginTop: '16px', padding: '16px', backgroundColor: '#000', borderRadius: '12px', border: '1px solid #27272a', overflow: 'hidden' }}>
+                                    <pre style={{ fontSize: '10px', color: '#22c55e', margin: 0, overflow: 'auto', maxHeight: '160px' }}>
                                         {JSON.stringify(analysis.details, null, 2)}
                                     </pre>
                                 </div>
