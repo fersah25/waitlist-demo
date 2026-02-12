@@ -43,6 +43,16 @@ interface DexPair {
         usd?: number;
     };
     priceUsd?: string;
+    volume?: {
+        m5: number;
+        h1: number;
+        h6: number;
+        h24: number;
+    };
+    info?: {
+        websites?: { label: string; url: string }[];
+        socials?: { type: string; url: string }[];
+    };
 }
 
 interface DexScreenerResponse {
@@ -53,8 +63,6 @@ interface DexScreenerResponse {
 interface SecurityAnalysis {
     trustScore: number;
     details: GoPlusTokenSecurity;
-    isLpLockedOrBurned: boolean;
-    lpLockedPercent: number; // New field for specific percentage
     isRenounced: boolean;
 }
 
@@ -80,11 +88,18 @@ const BaseShield: React.FC = () => {
         const price = parseFloat(priceStr);
         if (isNaN(price)) return '0.00';
 
-        // Use toLocaleString for flexible fraction digits
+        // Use greater precision for meme tokens
         return price.toLocaleString('en-US', {
             minimumFractionDigits: 2,
-            maximumFractionDigits: 12
+            maximumFractionDigits: 14 // Increased precision
         });
+    };
+
+    const formatVolume = (vol: number | undefined): string => {
+        if (vol === undefined) return '$0';
+        if (vol >= 1000000) return `$${(vol / 1000000).toFixed(1)}M`;
+        if (vol >= 1000) return `$${(vol / 1000).toFixed(1)}K`;
+        return `$${vol.toFixed(0)}`;
     };
 
     const checkToken = async () => {
@@ -207,37 +222,10 @@ const BaseShield: React.FC = () => {
 
         if (data?.is_open_source === '0') score -= 15;
 
-        // LP Status Logic (Detailed Percentage)
-        let lpLockedPercent = 0;
-        let isLpLockedOrBurned = false;
-
-        if (data?.lp_holders && Array.isArray(data.lp_holders)) {
-            const totalPercent = data.lp_holders.reduce((acc, holder) => {
-                const holderAddr = holder.address.toLowerCase();
-                // Check if burned (0x0...0 or 0xdead...dead) or locked (is_locked === 1)
-                if (BURN_ADDRESSES.includes(holderAddr) || holder.is_locked === 1) {
-                    return acc + parseFloat(holder.percent);
-                }
-                return acc;
-            }, 0);
-
-            lpLockedPercent = totalPercent * 100; // Convert to percentage (0.5 -> 50)
-
-            // If > 50% is burned/locked, we consider it "Safe"
-            if (lpLockedPercent > 50) {
-                isLpLockedOrBurned = true;
-            }
-        }
-
-        // Bonus for locked LP
-        if (isLpLockedOrBurned) score += 5; // Slight mood boost, but cap at 100
-
         setAnalysis({
             trustScore: Math.min(100, Math.max(0, score)),
             details: data,
-            isRenounced,
-            isLpLockedOrBurned,
-            lpLockedPercent
+            isRenounced
         });
     };
 
@@ -381,10 +369,9 @@ const BaseShield: React.FC = () => {
                         borderRadius: '16px',
                         padding: '20px',
                         marginBottom: '20px',
-                        position: 'relative',
                         overflow: 'hidden'
                     }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
                             <div style={{ flex: 1, overflow: 'hidden' }}>
                                 <h3 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0 0 4px 0', color: 'white' }}>{dexData.baseToken.name}</h3>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -396,11 +383,38 @@ const BaseShield: React.FC = () => {
                                             padding: '2px 6px',
                                             borderRadius: '4px',
                                             fontSize: '11px',
-                                            whiteSpace: 'nowrap'
+                                            whiteSpace: 'nowrap',
+                                            overflowWrap: 'break-word',
+                                            maxWidth: '100%'
                                         }}>
                                             ${formatPrice(dexData.priceUsd)}
                                         </span>
                                     )}
+                                </div>
+                                {/* Socials Row */}
+                                <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+                                    {dexData.info?.websites?.map((site, idx) => (
+                                        <a
+                                            key={`web-${idx}`}
+                                            href={site.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            style={{ backgroundColor: '#0052FF', color: 'white', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', textDecoration: 'none', fontWeight: 'bold' }}
+                                        >
+                                            🌐 Website
+                                        </a>
+                                    ))}
+                                    {dexData.info?.socials?.map((social, idx) => (
+                                        <a
+                                            key={`social-${idx}`}
+                                            href={social.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            style={{ backgroundColor: '#0052FF', color: 'white', padding: '6px 12px', borderRadius: '8px', fontSize: '11px', textDecoration: 'none', fontWeight: 'bold', textTransform: 'capitalize' }}
+                                        >
+                                            {social.type === 'twitter' ? '🐦 Twitter' : social.type === 'telegram' ? '✈️ Telegram' : social.type}
+                                        </a>
+                                    ))}
                                 </div>
                             </div>
 
@@ -419,23 +433,38 @@ const BaseShield: React.FC = () => {
                                 }}>
                                     Liq: ${(dexData.liquidity.usd / 1000).toFixed(1)}K
                                 </div>
-                            ) : (
-                                <div style={{
-                                    padding: '6px 10px',
-                                    borderRadius: '8px',
-                                    fontSize: '11px',
-                                    fontWeight: 'bold',
-                                    textTransform: 'uppercase',
-                                    backgroundColor: 'rgba(113, 113, 122, 0.1)',
-                                    color: '#71717a',
-                                    border: '1px solid rgba(113, 113, 122, 0.2)',
-                                    whiteSpace: 'nowrap',
-                                    marginLeft: '8px'
-                                }}>
-                                    Liq: Unknown
-                                </div>
-                            )}
+                            ) : null}
                         </div>
+
+                        {/* Volume Dashboard */}
+                        {dexData.volume && (
+                            <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(4, 1fr)',
+                                gap: '8px',
+                                backgroundColor: 'rgba(24, 24, 27, 0.5)',
+                                padding: '12px',
+                                borderRadius: '12px',
+                                borderTop: '1px solid #27272a'
+                            }}>
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '10px', color: '#71717a' }}>5m</div>
+                                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'white' }}>{formatVolume(dexData.volume.m5)}</div>
+                                </div>
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '10px', color: '#71717a' }}>1h</div>
+                                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'white' }}>{formatVolume(dexData.volume.h1)}</div>
+                                </div>
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '10px', color: '#71717a' }}>6h</div>
+                                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'white' }}>{formatVolume(dexData.volume.h6)}</div>
+                                </div>
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '10px', color: '#71717a' }}>24h</div>
+                                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'white' }}>{formatVolume(dexData.volume.h24)}</div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 ) : null}
 
@@ -513,23 +542,18 @@ const BaseShield: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* LP Status */}
-                            <div style={{
-                                backgroundColor: 'rgba(24, 24, 27, 0.5)',
-                                border: '1px solid #27272a',
-                                padding: '16px',
-                                borderRadius: '16px'
-                            }}>
-                                <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>LP Locked/Burned</div>
-                                <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                                    <span style={{ color: analysis.lpLockedPercent > 95 ? '#22c55e' : analysis.lpLockedPercent > 50 ? '#4ade80' : '#facc15' }}>
-                                        {analysis.lpLockedPercent.toFixed(2)}%
-                                    </span>
-                                    <span style={{ fontSize: '14px', marginLeft: '4px' }}>
-                                        {analysis.lpLockedPercent > 50 ? '🔒' : '⚠️'}
-                                    </span>
+                            {/* Contract */}
+                            <div style={{ backgroundColor: 'rgba(24, 24, 27, 0.5)', border: '1px solid #27272a', padding: '16px', borderRadius: '16px' }}>
+                                <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>Contract</div>
+                                <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'white' }}>
+                                    {analysis.details.is_proxy === '1' ? (
+                                        <span style={{ color: '#facc15' }}>Proxy</span>
+                                    ) : (
+                                        <span style={{ color: '#d4d4d8' }}>Standard</span>
+                                    )}
                                 </div>
                             </div>
+
                         </div>
 
                         {/* Raw Data Toggle */}
