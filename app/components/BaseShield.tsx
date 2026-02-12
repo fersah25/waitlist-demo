@@ -21,6 +21,26 @@ interface GoPlusResponse {
     result: Record<string, GoPlusTokenSecurity>;
 }
 
+// Types for DEXScreener Response
+interface DexPair {
+    chainId: string;
+    dexId: string;
+    url: string;
+    baseToken: {
+        address: string;
+        name: string;
+        symbol: string;
+    };
+    liquidity?: {
+        usd?: number;
+    };
+}
+
+interface DexScreenerResponse {
+    schemaVersion: string;
+    pairs: DexPair[] | null;
+}
+
 interface SecurityAnalysis {
     trustScore: number;
     details: GoPlusTokenSecurity;
@@ -32,6 +52,10 @@ const BaseShield: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [analysis, setAnalysis] = useState<SecurityAnalysis | null>(null);
 
+    // DEX Data State
+    const [dexData, setDexData] = useState<DexPair | null>(null);
+    const [dexError, setDexError] = useState<string | null>(null);
+
     // Constants
     const CHAIN_ID = '8453'; // Base Network
 
@@ -41,6 +65,44 @@ const BaseShield: React.FC = () => {
             // Optional: We could clear analysis here, but let's keep it until new search
         }
     }, [contractAddress, analysis]);
+
+    const fetchDexData = async (address: string) => {
+        setDexError(null);
+        setDexData(null);
+        try {
+            const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${address}`);
+            const data: DexScreenerResponse = await response.json();
+
+            if (!data.pairs || data.pairs.length === 0) {
+                setDexError('Bu token henüz yeni veya Base ağında değil.');
+                return;
+            }
+
+            // Find the best pair (usually the first one is the most liquid/relevant)
+            // Or filter for Base chain specifically if the API returns mixed chains (it does sometimes)
+            const basePair = data.pairs.find(pair => pair.chainId === 'base');
+
+            if (basePair) {
+                setDexData(basePair);
+            } else {
+                // Fallback to first pair if no explicit 'base' chain pair found, 
+                // but warned it might not be on Base? 
+                // Actually prompt says "Bu token henüz yeni veya Base ağında değil" if empty.
+                // If pairs exist but none on base, strictly speaking it's "not on Base".
+                // Let's check strict base chain.
+                const anyPair = data.pairs[0];
+                if (anyPair.chainId !== 'base') {
+                    setDexError('Token bulundu fakat Base ağında işlem görmüyor.');
+                } else {
+                    setDexData(anyPair);
+                }
+            }
+
+        } catch (err: unknown) {
+            console.error(err);
+            setDexError('DEX verisi alınamadı.');
+        }
+    };
 
     const fetchSecurityData = async () => {
         if (!contractAddress) {
@@ -60,8 +122,14 @@ const BaseShield: React.FC = () => {
         setLoading(true);
         setError(null);
         setAnalysis(null);
+        setDexData(null);
+        setDexError(null);
 
         try {
+            // 1. Fetch DEX Data first (Prioritized as requested)
+            await fetchDexData(lowerAddr);
+
+            // 2. Fetch Security Data
             const response = await fetch(`https://api.gopluslabs.io/api/v1/token_security/${CHAIN_ID}?contract_addresses=${lowerAddr}`);
             const data: GoPlusResponse = await response.json();
 
@@ -75,11 +143,6 @@ const BaseShield: React.FC = () => {
             const tokenData = data.result[lowerAddr];
 
             if (!tokenData) {
-                // Alert as requested, and set error state
-                // alert('Token bulunamadı, lütfen adresi kontrol edin.'); 
-                // Note: alert() pauses execution, better to just use UI error for better UX, 
-                // but user asked for "alert(...) desin veya ekrana basit bir uyarı yazsın".
-                // I will stick to the on-screen error for better React practice.
                 throw new Error('Token bulunamadı, lütfen adresi kontrol edin.');
             }
 
@@ -88,7 +151,7 @@ const BaseShield: React.FC = () => {
             if (err instanceof Error) {
                 setError(err.message);
             } else {
-                setError('An unknown error occurred while fetching data.');
+                setError('An unknown error occurred while fetching data.'); // Fallback error 
             }
         } finally {
             setLoading(false);
@@ -163,78 +226,104 @@ const BaseShield: React.FC = () => {
                 {error && <p className="text-red-400 text-sm mt-1">{error}</p>}
             </div>
 
-            {/* Results Section */}
-            {analysis && (
+            {/* Data Display Section */}
+            {(analysis || dexData || dexError) && (
                 <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
-                    {/* Trust Score Header */}
-                    <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-3">
-                        <span className="text-lg font-semibold">Trust Score</span>
-                        <div className={`text-3xl font-bold ${analysis.trustScore >= 80 ? 'text-green-400' :
-                            analysis.trustScore >= 50 ? 'text-yellow-400' :
-                                'text-red-500'
-                            }`}>
-                            {analysis.trustScore}/100
-                        </div>
-                    </div>
-
-                    {/* Details Grid */}
-                    <div className="grid grid-cols-1 gap-3 text-sm mb-4">
-
-                        {/* Honeypot */}
-                        <div className="flex justify-between items-center bg-gray-700/50 p-2 rounded">
-                            <span className="text-gray-300">Is Honeypot?</span>
-                            <span className={analysis.details.is_honeypot === '1' ? 'text-red-400 font-bold' : 'text-green-400'}>
-                                {analysis.details.is_honeypot === '1' ? 'YES (RUN!)' : 'No'}
-                            </span>
-                        </div>
-
-                        {/* Taxes */}
-                        <div className="flex justify-between items-center bg-gray-700/50 p-2 rounded">
-                            <span className="text-gray-300">Buy / Sell Tax</span>
-                            <span className={(parseFloat(analysis.details.buy_tax) > 0.1 || parseFloat(analysis.details.sell_tax) > 0.1) ? 'text-yellow-400' : 'text-green-400'}>
-                                {(parseFloat(analysis.details.buy_tax) * 100).toFixed(1)}% / {(parseFloat(analysis.details.sell_tax) * 100).toFixed(1)}%
-                            </span>
-                        </div>
-
-                        {/* Proxy */}
-                        <div className="flex justify-between items-center bg-gray-700/50 p-2 rounded">
-                            <span className="text-gray-300">Upgradeable Proxy?</span>
-                            <span className={analysis.details.is_proxy === '1' ? 'text-yellow-400' : 'text-green-400'}>
-                                {analysis.details.is_proxy === '1' ? 'Yes' : 'No'}
-                            </span>
-                        </div>
-
-                        {/* Ownership */}
-                        <div className="flex flex-col gap-1 bg-gray-700/50 p-2 rounded">
-                            <div className="flex justify-between items-center">
-                                <span className="text-gray-300">Owner Renounced?</span>
-                                <span className={!analysis.details.owner_address || analysis.details.owner_address === '0x0000000000000000000000000000000000000000' ? 'text-green-400' : 'text-yellow-400'}>
-                                    {(!analysis.details.owner_address || analysis.details.owner_address === '0x0000000000000000000000000000000000000000') ? 'Yes' : 'No'}
-                                </span>
+                    {/* DEX Info / Error */}
+                    <div className="mb-6 pb-4 border-b border-gray-700">
+                        {dexData ? (
+                            <div>
+                                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                    Token Found: <span className="text-blue-400">${dexData.baseToken.symbol}</span>
+                                </h3>
+                                <p className="text-sm text-gray-400">{dexData.baseToken.name}</p>
+                                <div className="mt-2 text-sm">
+                                    <span className="text-gray-400">Liquidity: </span>
+                                    <span className="text-green-400 font-mono">
+                                        ${dexData.liquidity?.usd?.toLocaleString() || '0'}
+                                    </span>
+                                </div>
                             </div>
-                            {analysis.details.owner_address && analysis.details.owner_address !== '0x0000000000000000000000000000000000000000' && (
-                                <span className="text-xs text-gray-500 font-mono break-all">
-                                    {analysis.details.owner_address}
-                                </span>
-                            )}
-                        </div>
-
-                        {/* LP Holders */}
-                        <div className="flex justify-between items-center bg-gray-700/50 p-2 rounded">
-                            <span className="text-gray-300">LP Holder Count</span>
-                            <span className="font-mono">{analysis.details.lp_holder_count || 'Unknown'}</span>
-                        </div>
-
+                        ) : dexError ? (
+                            <div className="text-yellow-400 text-sm font-medium">
+                                ⚠️ {dexError}
+                            </div>
+                        ) : null}
                     </div>
 
-                    {/* Raw Data Display (Debug) */}
-                    <div className="mt-4">
-                        <h3 className="text-xs font-semibold text-gray-500 mb-1">RAW DATA (DEBUG)</h3>
-                        <div className="p-2 bg-black/50 rounded text-xs font-mono overflow-auto max-h-60 text-green-300">
-                            <pre>{JSON.stringify(analysis.details, null, 2)}</pre>
-                        </div>
-                    </div>
+                    {analysis ? (
+                        <>
+                            {/* Trust Score Header */}
+                            <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-3">
+                                <span className="text-lg font-semibold">Trust Score</span>
+                                <div className={`text-3xl font-bold ${analysis.trustScore >= 80 ? 'text-green-400' :
+                                    analysis.trustScore >= 50 ? 'text-yellow-400' :
+                                        'text-red-500'
+                                    }`}>
+                                    {analysis.trustScore}/100
+                                </div>
+                            </div>
+
+                            {/* Details Grid */}
+                            <div className="grid grid-cols-1 gap-3 text-sm mb-4">
+
+                                {/* Honeypot */}
+                                <div className="flex justify-between items-center bg-gray-700/50 p-2 rounded">
+                                    <span className="text-gray-300">Is Honeypot?</span>
+                                    <span className={analysis.details.is_honeypot === '1' ? 'text-red-400 font-bold' : 'text-green-400'}>
+                                        {analysis.details.is_honeypot === '1' ? 'YES (RUN!)' : 'No'}
+                                    </span>
+                                </div>
+
+                                {/* Taxes */}
+                                <div className="flex justify-between items-center bg-gray-700/50 p-2 rounded">
+                                    <span className="text-gray-300">Buy / Sell Tax</span>
+                                    <span className={(parseFloat(analysis.details.buy_tax) > 0.1 || parseFloat(analysis.details.sell_tax) > 0.1) ? 'text-yellow-400' : 'text-green-400'}>
+                                        {(parseFloat(analysis.details.buy_tax) * 100).toFixed(1)}% / {(parseFloat(analysis.details.sell_tax) * 100).toFixed(1)}%
+                                    </span>
+                                </div>
+
+                                {/* Proxy */}
+                                <div className="flex justify-between items-center bg-gray-700/50 p-2 rounded">
+                                    <span className="text-gray-300">Upgradeable Proxy?</span>
+                                    <span className={analysis.details.is_proxy === '1' ? 'text-yellow-400' : 'text-green-400'}>
+                                        {analysis.details.is_proxy === '1' ? 'Yes' : 'No'}
+                                    </span>
+                                </div>
+
+                                {/* Ownership */}
+                                <div className="flex flex-col gap-1 bg-gray-700/50 p-2 rounded">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-gray-300">Owner Renounced?</span>
+                                        <span className={!analysis.details.owner_address || analysis.details.owner_address === '0x0000000000000000000000000000000000000000' ? 'text-green-400' : 'text-yellow-400'}>
+                                            {(!analysis.details.owner_address || analysis.details.owner_address === '0x0000000000000000000000000000000000000000') ? 'Yes' : 'No'}
+                                        </span>
+                                    </div>
+                                    {analysis.details.owner_address && analysis.details.owner_address !== '0x0000000000000000000000000000000000000000' && (
+                                        <span className="text-xs text-gray-500 font-mono break-all">
+                                            {analysis.details.owner_address}
+                                        </span>
+                                    )}
+                                </div>
+
+                                {/* LP Holders */}
+                                <div className="flex justify-between items-center bg-gray-700/50 p-2 rounded">
+                                    <span className="text-gray-300">LP Holder Count</span>
+                                    <span className="font-mono">{analysis.details.lp_holder_count || 'Unknown'}</span>
+                                </div>
+
+                            </div>
+
+                            {/* Raw Data Display (Debug) */}
+                            <div className="mt-4">
+                                <h3 className="text-xs font-semibold text-gray-500 mb-1">RAW DATA (DEBUG)</h3>
+                                <div className="p-2 bg-black/50 rounded text-xs font-mono overflow-auto max-h-60 text-green-300">
+                                    <pre>{JSON.stringify(analysis.details, null, 2)}</pre>
+                                </div>
+                            </div>
+                        </>
+                    ) : null}
                 </div>
             )}
         </div>
