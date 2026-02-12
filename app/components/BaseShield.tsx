@@ -1,3 +1,6 @@
+
+"use client";
+
 import React, { useState, useEffect } from 'react';
 
 // Types for GoPlus Response
@@ -144,8 +147,8 @@ const BaseShield: React.FC = () => {
                         onClick={fetchSecurityData}
                         disabled={loading}
                         className={`px-4 py-2 rounded font-medium transition-colors ${loading
-                                ? 'bg-gray-600 cursor-not-allowed'
-                                : 'bg-blue-600 hover:bg-blue-500'
+                            ? 'bg-gray-600 cursor-not-allowed'
+                            : 'bg-blue-600 hover:bg-blue-500'
                             }`}
                     >
                         {loading ? 'Scanning...' : 'Scan'}
@@ -162,8 +165,8 @@ const BaseShield: React.FC = () => {
                     <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-3">
                         <span className="text-lg font-semibold">Trust Score</span>
                         <div className={`text-3xl font-bold ${analysis.trustScore >= 80 ? 'text-green-400' :
-                                analysis.trustScore >= 50 ? 'text-yellow-400' :
-                                    'text-red-500'
+                            analysis.trustScore >= 50 ? 'text-yellow-400' :
+                                'text-red-500'
                             }`}>
                             {analysis.trustScore}/100
                         </div>
