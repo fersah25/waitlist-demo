@@ -55,7 +55,6 @@ const BaseShield: React.FC = () => {
 
     // DEX Data State
     const [dexData, setDexData] = useState<DexPair | null>(null);
-    const [dexError, setDexError] = useState<string | null>(null);
 
     // Constants
     const CHAIN_ID = '8453'; // Base Network
@@ -68,14 +67,12 @@ const BaseShield: React.FC = () => {
     }, [contractAddress, analysis]);
 
     const fetchDexData = async (address: string) => {
-        setDexError(null);
         setDexData(null);
         try {
             const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${address}`);
             const data: DexScreenerResponse = await response.json();
 
             if (!data.pairs || data.pairs.length === 0) {
-                setDexError('Bu token henüz yeni veya Base ağında değil.');
                 return;
             }
 
@@ -86,7 +83,7 @@ const BaseShield: React.FC = () => {
             } else {
                 const anyPair = data.pairs[0];
                 if (anyPair.chainId !== 'base') {
-                    setDexError('Token bulundu fakat Base ağında işlem görmüyor.');
+                    // Token found but not on Base, do nothing or handle silently
                 } else {
                     setDexData(anyPair);
                 }
@@ -94,7 +91,7 @@ const BaseShield: React.FC = () => {
 
         } catch (err: unknown) {
             console.error(err);
-            setDexError('DEX verisi alınamadı.');
+            // Silent fail for DEX data as recommended
         }
     };
 
@@ -115,7 +112,6 @@ const BaseShield: React.FC = () => {
         setError(null);
         setAnalysis(null);
         setDexData(null);
-        setDexError(null);
 
         try {
             await fetchDexData(lowerAddr);
