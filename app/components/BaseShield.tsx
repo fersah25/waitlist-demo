@@ -49,18 +49,15 @@ interface SecurityAnalysis {
 
 const BaseShield: React.FC = () => {
     const [contractAddress, setContractAddress] = useState<string>('');
-    const [cleanAddress, setCleanAddress] = useState<string>(''); // For the button link
+    const [cleanAddress, setCleanAddress] = useState<string>('');
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [analysis, setAnalysis] = useState<SecurityAnalysis | null>(null);
 
-    // DEX Data State
     const [dexData, setDexData] = useState<DexPair | null>(null);
 
-    // Constants
     const CHAIN_ID = '8453'; // Base Network
 
-    // Reset analysis when address changes to prevent stale data display
     useEffect(() => {
         if (analysis && analysis.details.contract_address.toLowerCase() !== contractAddress.toLowerCase()) {
             // Optional: Keep until new search
@@ -70,97 +67,86 @@ const BaseShield: React.FC = () => {
     const fetchDexData = async (address: string) => {
         console.log(`[BaseShield] Fetching DEX Data for: ${address}`);
         try {
-            // Using explicit CORS mode, though standard fetch usually handles simple GETs fine
             const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${address}`, {
                 method: 'GET',
                 mode: 'cors',
-                headers: {
-                    'Accept': 'application/json',
-                }
+                headers: { 'Accept': 'application/json' }
             });
 
             if (!response.ok) {
                 console.warn(`[BaseShield] DEXScreener API failed with status: ${response.status}`);
-                return; // Don't throw, just return to allow security check to proceed
-            }
-
-            const data: DexScreenerResponse = await response.json();
-            console.log('[BaseShield] DEXScreener Raw Response:', data);
-
-            if (!data?.pairs || data.pairs.length === 0) {
-                console.log('[BaseShield] No pairs found in DEXScreener response.');
                 return;
             }
 
-            // Prioritize Base pair, fallback to first valid pair
+            const data: DexScreenerResponse = await response.json();
+
+            // Handle unlisted tokens safely
+            if (!data?.pairs || data.pairs.length === 0) {
+                console.log('[BaseShield] No liquidity pairs found.');
+                // We do NOT set an error here, just return, so GoPlus can still run.
+                // The user will see no Dex Card, which implies "Unlisted/No Liquidity".
+                return;
+            }
+
             const basePair = data.pairs.find(pair => pair.chainId === 'base');
 
             if (basePair) {
                 setDexData(basePair);
             } else {
                 const anyPair = data.pairs[0];
-                // If found but not on Base, maybe confusing to show? 
-                // Let's show it anyway but user should know chainId.
-                // For now, simple fallback.
-                if (anyPair) {
-                    setDexData(anyPair);
-                }
+                if (anyPair) setDexData(anyPair);
             }
 
         } catch (err: unknown) {
             console.error('[BaseShield] Critical DEX Fetch Error:', err);
-            // Silent fail to ensure app doesn't crash.
-            // DEX data is "nice to have", security data is critical (or at least independent)
         }
     };
 
     const fetchSecurityData = async () => {
-        // 1. Validation & Cleaning
         if (!contractAddress) return;
 
+        // 1. Trim & Validate
         const trimmedAddr = contractAddress.trim().toLowerCase();
-        setCleanAddress(trimmedAddr); // Update clean address for link
+        setCleanAddress(trimmedAddr);
 
         if (!trimmedAddr.startsWith('0x') || trimmedAddr.length !== 42) {
             setError('Invalid format. Use 0x... (42 chars)');
             return;
         }
 
-        // 2. Reset State
         setLoading(true);
         setError(null);
         setAnalysis(null);
         setDexData(null);
 
         try {
-            // 3. Robust Fetch Sequence
-            // A. Fetch DEX Data (Safe Mode)
+            // 2. Fetch DEX Data (Best Effort)
             await fetchDexData(trimmedAddr);
 
-            // B. Fetch Security Data
+            // 3. Fetch Security Data (Priority)
             console.log(`[BaseShield] Fetching GoPlus Security Data for: ${trimmedAddr}`);
             const response = await fetch(`https://api.gopluslabs.io/api/v1/token_security/${CHAIN_ID}?contract_addresses=${trimmedAddr}`);
 
-            if (!response.ok) {
-                throw new Error(`Security API Error: ${response.status}`);
-            }
+            if (!response.ok) throw new Error(`Security API Error: ${response.status}`);
 
             const data: GoPlusResponse = await response.json();
 
-            // Defensive Check
             if (data?.code !== 1 || !data?.result) {
                 throw new Error(data?.message || 'Failed to fetch security data.');
             }
 
             const tokenData = data.result?.[trimmedAddr];
 
+            // Handle Wallets vs Unlisted Tokens
             if (!tokenData) {
-                // If we found DEX data, we shouldn't block completely.
-                if (dexData) {
-                    setError('Security scan incomplete, but token market data found.');
-                    return; // Stop here but leave DexData visible
+                // Check if it looks like a wallet (Code 1 but no result usually means address has no token contract code)
+                // But GoPlus explicitly returns empty for EOAs (Externally Owned Accounts / Wallets)
+                // If we also found NO DEX data, it's likely a wallet or fresh address.
+                if (!dexData) {
+                    throw new Error('Address has no token data. Is this a wallet?');
                 } else {
-                    throw new Error('Token data not found on GoPlus or DEXScreener.');
+                    setError('Security info unavailable, but market data found.');
+                    return;
                 }
             }
 
@@ -169,7 +155,6 @@ const BaseShield: React.FC = () => {
         } catch (err: unknown) {
             console.error('[BaseShield] Security Scan Error:', err);
 
-            // If we have DEX data, the "error" is less critical
             if (dexData) {
                 setError('Security info unavailable, but market data found.');
             } else {
@@ -303,7 +288,7 @@ const BaseShield: React.FC = () => {
                     )}
                 </div>
 
-                {/* Manual Link Button - Always visible if cleanAddress exists */}
+                {/* Manual Link Button */}
                 {cleanAddress && cleanAddress.length === 42 && (
                     <div style={{ marginBottom: '20px', textAlign: 'center' }}>
                         <a
@@ -476,7 +461,6 @@ const BaseShield: React.FC = () => {
                                     <pre style={{ fontSize: '10px', color: '#22c55e', margin: 0, overflow: 'auto', maxHeight: '160px' }}>
                                         {JSON.stringify(analysis.details, null, 2)}
                                     </pre>
-                                    {/* Add DEX Data Debug too if desired, though not requested explicitly separate */}
                                 </div>
                             </details>
                         </div>
