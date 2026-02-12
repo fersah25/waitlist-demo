@@ -3,6 +3,13 @@
 import React, { useState } from 'react';
 
 // Types for GoPlus Response
+interface LpHolder {
+    address: string;
+    percent: string;
+    is_locked?: number; // 1 if locked
+    balance?: string;
+}
+
 interface GoPlusTokenSecurity {
     contract_address: string;
     is_honeypot: string; // "1" or "0"
@@ -12,6 +19,7 @@ interface GoPlusTokenSecurity {
     owner_address: string; // address string or ""
     lp_holder_count: string; // number as string
     is_open_source: string; // "1" or "0"
+    lp_holders?: LpHolder[]; // Array of LP holders
     [key: string]: unknown; // Allow other properties for raw display
 }
 
@@ -45,6 +53,8 @@ interface DexScreenerResponse {
 interface SecurityAnalysis {
     trustScore: number;
     details: GoPlusTokenSecurity;
+    isLpLockedOrBurned: boolean;
+    isRenounced: boolean;
 }
 
 const BaseShield: React.FC = () => {
@@ -58,6 +68,11 @@ const BaseShield: React.FC = () => {
 
     // Constants
     const CHAIN_ID = '8453'; // Base Network
+    const BURN_ADDRESSES = [
+        '0x0000000000000000000000000000000000000000',
+        '0x000000000000000000000000000000000000dead',
+        '0xdead000000000000000042069420694206942069'
+    ];
 
     const checkToken = async () => {
         // 1. Address Normalization
@@ -90,7 +105,6 @@ const BaseShield: React.FC = () => {
 
                 // Deep Safety Check
                 if (!data || !data.pairs || data.pairs.length === 0) {
-                    // Log but don't crash. UI handles null dexData.
                     console.log('No liquidity pairs found on DEXScreener.');
                     return null;
                 }
@@ -101,9 +115,6 @@ const BaseShield: React.FC = () => {
                 if (basePair) {
                     return basePair;
                 } else {
-                    // Fallback: If not on Base, maybe return null to be strict as requested?
-                    // User prompt: "Filter for the Base network specifically: const basePair = data.pairs.find(p => p.chainId === 'base');"
-                    // Whatever happens, we just return what we found or null.
                     return null;
                 }
 
@@ -143,10 +154,6 @@ const BaseShield: React.FC = () => {
             // Handle DEX Results
             if (dexResult) {
                 setDexData(dexResult);
-            } else {
-                // If DEX failed or no pairs, we do nothing (dexData remains null)
-                // Optional: set a specific error if desired, but prompt says "show 'N/A'" implies specific UI handling
-                // We handle this in UI rendering.
             }
 
             // Handle Security Results
@@ -155,10 +162,8 @@ const BaseShield: React.FC = () => {
             } else {
                 // Determine Error Message
                 if (!dexResult) {
-                    // Nothing found
                     setError('No token data found. This address may be a wallet or unlisted.');
                 } else {
-                    // Dex found, Security failed
                     setError('Security data unavailable, but token market data found.');
                 }
             }
@@ -174,6 +179,7 @@ const BaseShield: React.FC = () => {
     const calculateTrustScore = (data: GoPlusTokenSecurity) => {
         let score = 100;
 
+        // --- Scoring Logic ---
         if (data?.is_honeypot === '1') score -= 50;
 
         const buyTax = parseFloat(data?.buy_tax || '0');
@@ -182,13 +188,39 @@ const BaseShield: React.FC = () => {
 
         if (data?.is_proxy === '1') score -= 10;
 
-        if (data?.owner_address && data.owner_address !== '0x0000000000000000000000000000000000000000') score -= 5;
+        // Ownership Logic
+        const isRenounced = !data?.owner_address || BURN_ADDRESSES.includes(data.owner_address.toLowerCase());
+        if (!isRenounced) score -= 5;
 
         if (data?.is_open_source === '0') score -= 15;
 
+        // LP Status Logic
+        let isLpLockedOrBurned = false;
+        if (data?.lp_holders && Array.isArray(data.lp_holders)) {
+            const totalLpPercent = data.lp_holders.reduce((acc, holder) => {
+                const holderAddr = holder.address.toLowerCase();
+                // Check if burned (0x0...0 or 0xdead...dead) or locked (is_locked === 1)
+                if (BURN_ADDRESSES.includes(holderAddr) || holder.is_locked === 1) {
+                    return acc + parseFloat(holder.percent);
+                }
+                return acc;
+            }, 0);
+
+            // If > 50% is burned/locked, we consider it "Safe" enough for this check
+            // Or if top holder is burn address with huge %
+            if (totalLpPercent > 0.5) { // 50%
+                isLpLockedOrBurned = true;
+            }
+        }
+
+        // Bonus for locked LP
+        if (isLpLockedOrBurned) score += 5; // Slight mood boost, but cap at 100
+
         setAnalysis({
-            trustScore: Math.max(0, score),
-            details: data
+            trustScore: Math.min(100, Math.max(0, score)),
+            details: data,
+            isRenounced,
+            isLpLockedOrBurned
         });
     };
 
@@ -441,26 +473,26 @@ const BaseShield: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Contract */}
+                            {/* Ownership Status */}
                             <div style={{ backgroundColor: 'rgba(24, 24, 27, 0.5)', border: '1px solid #27272a', padding: '16px', borderRadius: '16px' }}>
-                                <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>Contract</div>
-                                <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'white' }}>
-                                    {analysis.details.is_proxy === '1' ? (
-                                        <span style={{ color: '#facc15' }}>Proxy</span>
+                                <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>Ownership</div>
+                                <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
+                                    {analysis.isRenounced ? (
+                                        <span style={{ color: '#4ade80' }}>Renounced ✅</span>
                                     ) : (
-                                        <span style={{ color: '#d4d4d8' }}>Standard</span>
+                                        <span style={{ color: '#facc15' }}>Owner Active ⚠️</span>
                                     )}
                                 </div>
                             </div>
 
-                            {/* Ownership */}
+                            {/* LP Status */}
                             <div style={{ backgroundColor: 'rgba(24, 24, 27, 0.5)', border: '1px solid #27272a', padding: '16px', borderRadius: '16px' }}>
-                                <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>Ownership</div>
-                                <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'white' }}>
-                                    {(!analysis.details.owner_address || analysis.details.owner_address === '0x0000000000000000000000000000000000000000') ? (
-                                        <span style={{ color: '#4ade80' }}>Renounced</span>
+                                <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>Liquidity</div>
+                                <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
+                                    {analysis.isLpLockedOrBurned ? (
+                                        <span style={{ color: '#4ade80' }}>Locked/Burned 🔒</span>
                                     ) : (
-                                        <span style={{ color: '#facc15' }}>Active</span>
+                                        <span style={{ color: '#facc15' }}>Unsecured ⚠️</span>
                                     )}
                                 </div>
                             </div>
