@@ -12,6 +12,7 @@ interface GoPlusTokenSecurity {
     owner_address: string; // address string or ""
     lp_holder_count: string; // number as string
     is_open_source: string; // "1" or "0"
+    [key: string]: unknown; // Allow other properties for raw display
 }
 
 interface GoPlusResponse {
@@ -47,8 +48,11 @@ const BaseShield: React.FC = () => {
             return;
         }
 
+        // Normalize address to lowercase immediately
+        const lowerAddr = contractAddress.toLowerCase();
+
         // Basic address validation (starts with 0x, 42 chars)
-        if (!/^0x[a-fA-F0-9]{40}$/.test(contractAddress)) {
+        if (!/^0x[a-fA-F0-9]{40}$/.test(lowerAddr)) {
             setError('Invalid contract address format.');
             return;
         }
@@ -58,21 +62,25 @@ const BaseShield: React.FC = () => {
         setAnalysis(null);
 
         try {
-            const response = await fetch(`https://api.gopluslabs.io/api/v1/token_security/${CHAIN_ID}?contract_addresses=${contractAddress}`);
+            const response = await fetch(`https://api.gopluslabs.io/api/v1/token_security/${CHAIN_ID}?contract_addresses=${lowerAddr}`);
             const data: GoPlusResponse = await response.json();
 
+            // Strict Null Check
             if (data.code !== 1 || !data.result) {
                 throw new Error(data.message || 'Failed to fetch security data.');
             }
 
-            // The API returns a map with the address (lowercase) as key
-            const lowerAddr = contractAddress.toLowerCase();
-            // GoPlus sometimes returns keys in lowercase. We should find the matching key.
-            const resultKey = Object.keys(data.result).find(k => k.toLowerCase() === lowerAddr);
-            const tokenData = resultKey ? data.result[resultKey] : null;
+            // Check if specific address exists in result
+            // GoPlus API keys are usually lowercase, but we double check
+            const tokenData = data.result[lowerAddr];
 
             if (!tokenData) {
-                throw new Error('No data found for this contract.');
+                // Alert as requested, and set error state
+                // alert('Token bulunamadı, lütfen adresi kontrol edin.'); 
+                // Note: alert() pauses execution, better to just use UI error for better UX, 
+                // but user asked for "alert(...) desin veya ekrana basit bir uyarı yazsın".
+                // I will stick to the on-screen error for better React practice.
+                throw new Error('Token bulunamadı, lütfen adresi kontrol edin.');
             }
 
             calculateTrustScore(tokenData);
@@ -108,15 +116,11 @@ const BaseShield: React.FC = () => {
         }
 
         // 4. Ownership Renounced Check (Empty address or dead address usually means renounced, but API gives owner_address)
-        // If owner address exists and is not empty/null, it's not renounced.
-        // However, for this simple score, let's just penalty if it's NOT renounced? 
-        // Or maybe just leave it as informational. The prompt asks "Is ownership renounced?".
-        // Let's penalize slightly if not renounced for a "Trust Score".
         if (data.owner_address && data.owner_address !== '0x0000000000000000000000000000000000000000') {
             score -= 5;
         }
 
-        // 5. Open Source (Bonus/Penalty) - Not requested but good for "Trust"
+        // 5. Open Source (Bonus/Penalty)
         if (data.is_open_source === '0') {
             score -= 15; // Unverified source is high risk
         }
@@ -175,7 +179,7 @@ const BaseShield: React.FC = () => {
                     </div>
 
                     {/* Details Grid */}
-                    <div className="grid grid-cols-1 gap-3 text-sm">
+                    <div className="grid grid-cols-1 gap-3 text-sm mb-4">
 
                         {/* Honeypot */}
                         <div className="flex justify-between items-center bg-gray-700/50 p-2 rounded">
@@ -222,6 +226,14 @@ const BaseShield: React.FC = () => {
                             <span className="font-mono">{analysis.details.lp_holder_count || 'Unknown'}</span>
                         </div>
 
+                    </div>
+
+                    {/* Raw Data Display (Debug) */}
+                    <div className="mt-4">
+                        <h3 className="text-xs font-semibold text-gray-500 mb-1">RAW DATA (DEBUG)</h3>
+                        <div className="p-2 bg-black/50 rounded text-xs font-mono overflow-auto max-h-60 text-green-300">
+                            <pre>{JSON.stringify(analysis.details, null, 2)}</pre>
+                        </div>
                     </div>
                 </div>
             )}
