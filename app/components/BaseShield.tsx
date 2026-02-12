@@ -54,6 +54,7 @@ interface SecurityAnalysis {
     trustScore: number;
     details: GoPlusTokenSecurity;
     isLpLockedOrBurned: boolean;
+    lpLockedPercent: number; // New field for specific percentage
     isRenounced: boolean;
 }
 
@@ -73,6 +74,18 @@ const BaseShield: React.FC = () => {
         '0x000000000000000000000000000000000000dead',
         '0xdead000000000000000042069420694206942069'
     ];
+
+    const formatPrice = (priceStr: string | undefined): string => {
+        if (!priceStr) return '0.00';
+        const price = parseFloat(priceStr);
+        if (isNaN(price)) return '0.00';
+
+        // Use toLocaleString for flexible fraction digits
+        return price.toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 12
+        });
+    };
 
     const checkToken = async () => {
         // 1. Address Normalization
@@ -194,10 +207,12 @@ const BaseShield: React.FC = () => {
 
         if (data?.is_open_source === '0') score -= 15;
 
-        // LP Status Logic
+        // LP Status Logic (Detailed Percentage)
+        let lpLockedPercent = 0;
         let isLpLockedOrBurned = false;
+
         if (data?.lp_holders && Array.isArray(data.lp_holders)) {
-            const totalLpPercent = data.lp_holders.reduce((acc, holder) => {
+            const totalPercent = data.lp_holders.reduce((acc, holder) => {
                 const holderAddr = holder.address.toLowerCase();
                 // Check if burned (0x0...0 or 0xdead...dead) or locked (is_locked === 1)
                 if (BURN_ADDRESSES.includes(holderAddr) || holder.is_locked === 1) {
@@ -206,9 +221,10 @@ const BaseShield: React.FC = () => {
                 return acc;
             }, 0);
 
-            // If > 50% is burned/locked, we consider it "Safe" enough for this check
-            // Or if top holder is burn address with huge %
-            if (totalLpPercent > 0.5) { // 50%
+            lpLockedPercent = totalPercent * 100; // Convert to percentage (0.5 -> 50)
+
+            // If > 50% is burned/locked, we consider it "Safe"
+            if (lpLockedPercent > 50) {
                 isLpLockedOrBurned = true;
             }
         }
@@ -220,7 +236,8 @@ const BaseShield: React.FC = () => {
             trustScore: Math.min(100, Math.max(0, score)),
             details: data,
             isRenounced,
-            isLpLockedOrBurned
+            isLpLockedOrBurned,
+            lpLockedPercent
         });
     };
 
@@ -368,13 +385,20 @@ const BaseShield: React.FC = () => {
                         overflow: 'hidden'
                     }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
-                            <div>
+                            <div style={{ flex: 1, overflow: 'hidden' }}>
                                 <h3 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0 0 4px 0', color: 'white' }}>{dexData.baseToken.name}</h3>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                     <span style={{ color: '#60a5fa', fontWeight: 'bold' }}>${dexData.baseToken.symbol}</span>
                                     {dexData.priceUsd && (
-                                        <span style={{ backgroundColor: '#27272a', color: '#a1a1aa', padding: '2px 6px', borderRadius: '4px', fontSize: '11px' }}>
-                                            ${parseFloat(dexData.priceUsd).toFixed(6)}
+                                        <span style={{
+                                            backgroundColor: '#27272a',
+                                            color: '#a1a1aa',
+                                            padding: '2px 6px',
+                                            borderRadius: '4px',
+                                            fontSize: '11px',
+                                            whiteSpace: 'nowrap'
+                                        }}>
+                                            ${formatPrice(dexData.priceUsd)}
                                         </span>
                                     )}
                                 </div>
@@ -389,7 +413,9 @@ const BaseShield: React.FC = () => {
                                     textTransform: 'uppercase',
                                     backgroundColor: dexData.liquidity.usd > 10000 ? 'rgba(74, 222, 128, 0.1)' : 'rgba(250, 204, 21, 0.1)',
                                     color: dexData.liquidity.usd > 10000 ? '#4ade80' : '#facc15',
-                                    border: `1px solid ${dexData.liquidity.usd > 10000 ? 'rgba(74, 222, 128, 0.2)' : 'rgba(250, 204, 21, 0.2)'}`
+                                    border: `1px solid ${dexData.liquidity.usd > 10000 ? 'rgba(74, 222, 128, 0.2)' : 'rgba(250, 204, 21, 0.2)'}`,
+                                    whiteSpace: 'nowrap',
+                                    marginLeft: '8px'
                                 }}>
                                     Liq: ${(dexData.liquidity.usd / 1000).toFixed(1)}K
                                 </div>
@@ -402,7 +428,9 @@ const BaseShield: React.FC = () => {
                                     textTransform: 'uppercase',
                                     backgroundColor: 'rgba(113, 113, 122, 0.1)',
                                     color: '#71717a',
-                                    border: '1px solid rgba(113, 113, 122, 0.2)'
+                                    border: '1px solid rgba(113, 113, 122, 0.2)',
+                                    whiteSpace: 'nowrap',
+                                    marginLeft: '8px'
                                 }}>
                                     Liq: Unknown
                                 </div>
@@ -486,14 +514,20 @@ const BaseShield: React.FC = () => {
                             </div>
 
                             {/* LP Status */}
-                            <div style={{ backgroundColor: 'rgba(24, 24, 27, 0.5)', border: '1px solid #27272a', padding: '16px', borderRadius: '16px' }}>
-                                <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>Liquidity</div>
+                            <div style={{
+                                backgroundColor: 'rgba(24, 24, 27, 0.5)',
+                                border: '1px solid #27272a',
+                                padding: '16px',
+                                borderRadius: '16px'
+                            }}>
+                                <div style={{ fontSize: '10px', color: '#71717a', textTransform: 'uppercase', fontWeight: 'bold', marginBottom: '4px' }}>LP Locked/Burned</div>
                                 <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                                    {analysis.isLpLockedOrBurned ? (
-                                        <span style={{ color: '#4ade80' }}>Locked/Burned 🔒</span>
-                                    ) : (
-                                        <span style={{ color: '#facc15' }}>Unsecured ⚠️</span>
-                                    )}
+                                    <span style={{ color: analysis.lpLockedPercent > 95 ? '#22c55e' : analysis.lpLockedPercent > 50 ? '#4ade80' : '#facc15' }}>
+                                        {analysis.lpLockedPercent.toFixed(2)}%
+                                    </span>
+                                    <span style={{ fontSize: '14px', marginLeft: '4px' }}>
+                                        {analysis.lpLockedPercent > 50 ? '🔒' : '⚠️'}
+                                    </span>
                                 </div>
                             </div>
                         </div>
