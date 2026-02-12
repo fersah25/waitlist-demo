@@ -67,12 +67,13 @@ const BaseShield: React.FC = () => {
     }, [contractAddress, analysis]);
 
     const fetchDexData = async (address: string) => {
-        setDexData(null);
+        // NOTE: We do NOT clear dexData here to allow it to persist/update independently if needed,
+        // but typically it is cleared in the main handler.
         try {
             const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${address}`);
             const data: DexScreenerResponse = await response.json();
 
-            if (!data.pairs || data.pairs.length === 0) {
+            if (!data?.pairs || data.pairs.length === 0) {
                 return;
             }
 
@@ -82,8 +83,8 @@ const BaseShield: React.FC = () => {
                 setDexData(basePair);
             } else {
                 const anyPair = data.pairs[0];
-                if (anyPair.chainId !== 'base') {
-                    // Token found but not on Base, do nothing or handle silently
+                if (anyPair?.chainId !== 'base') {
+                    // Token found but not on Base
                 } else {
                     setDexData(anyPair);
                 }
@@ -91,23 +92,25 @@ const BaseShield: React.FC = () => {
 
         } catch (err: unknown) {
             console.error(err);
-            // Silent fail for DEX data as recommended
+            // Silent fail for DEX data
         }
     };
 
     const fetchSecurityData = async () => {
+        // Prevent auto-run if empty
         if (!contractAddress) {
-            setError('Please enter a contract address.');
             return;
         }
 
         const lowerAddr = contractAddress.toLowerCase();
 
-        if (!/^0x[a-fA-F0-9]{40}$/.test(lowerAddr)) {
+        // Relaxed Validation
+        if (!lowerAddr.startsWith('0x') || lowerAddr.length !== 42) {
             setError('Invalid contract address format.');
             return;
         }
 
+        // Reset State
         setLoading(true);
         setError(null);
         setAnalysis(null);
@@ -119,22 +122,40 @@ const BaseShield: React.FC = () => {
             const response = await fetch(`https://api.gopluslabs.io/api/v1/token_security/${CHAIN_ID}?contract_addresses=${lowerAddr}`);
             const data: GoPlusResponse = await response.json();
 
-            if (data.code !== 1 || !data.result) {
-                throw new Error(data.message || 'Failed to fetch security data.');
+            // Defensive Coding: Check code and result existence with optional chaining
+            if (data?.code !== 1 || !data?.result) {
+                throw new Error(data?.message || 'Failed to fetch security data.');
             }
 
-            const tokenData = data.result[lowerAddr];
+            const tokenData = data.result?.[lowerAddr];
 
             if (!tokenData) {
-                throw new Error('Token bulunamadı, lütfen adresi kontrol edin.');
+                // If we have DEX data but no security data (e.g. $TELLR scenario)
+                // We should NOT throw an error that hides the DEX data.
+                // Instead, we just stop here or set a specific warning, but keep DEX data visible.
+                throw new Error('Token scanning complete. No security data found on GoPlus yet.');
             }
 
             calculateTrustScore(tokenData);
         } catch (err: unknown) {
-            if (err instanceof Error) {
-                setError(err.message);
+            // Handle Partial Success ($TELLR Case)
+            // If we have DEX data, we don't want to show a blocking error for security data
+            if (dexData) {
+                // We have DEX data, so maybe just log the error or show a mild warning
+                // but here we just set the error state which renders below the input.
+                // The DEX card will still render because `dexData` is set.
+                if (err instanceof Error) {
+                    setError(`Security scan warning: ${err.message}`);
+                } else {
+                    setError('Security data unavailable, but token found on DEX.');
+                }
             } else {
-                setError('An unknown error occurred while fetching data.');
+                // No DEX data AND No Security data -> Full Error
+                if (err instanceof Error) {
+                    setError(err.message);
+                } else {
+                    setError('An unknown error occurred while fetching data.');
+                }
             }
         } finally {
             setLoading(false);
@@ -144,17 +165,18 @@ const BaseShield: React.FC = () => {
     const calculateTrustScore = (data: GoPlusTokenSecurity) => {
         let score = 100;
 
-        if (data.is_honeypot === '1') score -= 50;
+        if (data?.is_honeypot === '1') score -= 50;
 
-        const buyTax = parseFloat(data.buy_tax || '0');
-        const sellTax = parseFloat(data.sell_tax || '0');
+        const buyTax = parseFloat(data?.buy_tax || '0');
+        const sellTax = parseFloat(data?.sell_tax || '0');
         if (buyTax > 0.1 || sellTax > 0.1) score -= 20;
 
-        if (data.is_proxy === '1') score -= 10;
+        if (data?.is_proxy === '1') score -= 10;
 
-        if (data.owner_address && data.owner_address !== '0x0000000000000000000000000000000000000000') score -= 5;
+        // Defensive check for owner_address
+        if (data?.owner_address && data.owner_address !== '0x0000000000000000000000000000000000000000') score -= 5;
 
-        if (data.is_open_source === '0') score -= 15;
+        if (data?.is_open_source === '0') score -= 15;
 
         setAnalysis({
             trustScore: Math.max(0, score),
