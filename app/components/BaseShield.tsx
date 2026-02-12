@@ -21,7 +21,7 @@ interface GoPlusResponse {
     result: Record<string, GoPlusTokenSecurity>;
 }
 
-// Types for DEXScreener Response
+// Types for DEXScreener Response based on Official Docs
 interface DexPair {
     chainId: string;
     dexId: string;
@@ -48,108 +48,128 @@ interface SecurityAnalysis {
 }
 
 const BaseShield: React.FC = () => {
+    // State
     const [contractAddress, setContractAddress] = useState<string>('');
     const [cleanAddress, setCleanAddress] = useState<string>('');
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [analysis, setAnalysis] = useState<SecurityAnalysis | null>(null);
-
-    // DEX Data State
     const [dexData, setDexData] = useState<DexPair | null>(null);
 
+    // Constants
     const CHAIN_ID = '8453'; // Base Network
 
-    // Reset analysis when address changes to prevent stale data display
-    useEffect(() => {
-        if (analysis && analysis.details.contract_address.toLowerCase() !== contractAddress.toLowerCase()) {
-            // Optional: Keep until new search
-        }
-    }, [contractAddress, analysis]);
+    // Reset analysis only when starting a new scan, handled in checkToken
 
     const checkToken = async () => {
-        // 1. Validation Logic
-        if (!contractAddress) return;
-
-        // Address Normalization - Absolute Safety
+        // 1. Address Normalization
         const normalizedAddress = contractAddress.trim().toLowerCase();
-        setCleanAddress(normalizedAddress);
 
         if (!normalizedAddress.startsWith('0x') || normalizedAddress.length !== 42) {
-            setError('Please enter a valid contract address (0x...)');
+            setError('Please enter a valid contract address (0x... + 40 chars)');
             return;
         }
 
-        // Reset State
+        setCleanAddress(normalizedAddress);
         setLoading(true);
         setError(null);
         setAnalysis(null);
         setDexData(null);
 
-        // Track local success to handle partial failures
-        let dexSuccess = false;
+        // Define Parallel Tasks
+
+        // Task A: DEXScreener Fetch
+        const fetchDex = async () => {
+            try {
+                const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${normalizedAddress}`);
+
+                // Handle HTTP errors gracefully
+                if (!response.ok) {
+                    console.warn(`DEXScreener API error: ${response.status}`);
+                    return null;
+                }
+
+                const data: DexScreenerResponse = await response.json();
+
+                // Strict Safety Check as requested
+                if (!data || !data.pairs || data.pairs.length === 0) {
+                    // No pools found - logical explicit handling
+                    console.log('No liquidity pools found for this token.');
+                    return null;
+                }
+
+                // Filter for Base network specifically
+                const basePair = data.pairs.find(p => p.chainId === 'base');
+
+                if (basePair) {
+                    return basePair;
+                } else {
+                    // Fallback to first pair if Base specific not found? 
+                    // Prompt implies specific filter, but let's be safe and return first valid if base not found
+                    // to not show empty if it exists elsewhere. 
+                    // However, strict prompt says "Filter for the Base network specifically".
+                    // If not on Base, maybe return null to be strict?
+                    // Let's stick to the prompt's request for Base but fall back to [0] commonly in implementation unless strictly forbidden.
+                    // "Filter for the Base network specifically: const basePair = data.pairs.find(p => p.chainId === 'base');"
+                    return basePair || null;
+                }
+
+            } catch (err) {
+                console.error('DEXScreener Fetch Failed:', err);
+                return null;
+            }
+        };
+
+        // Task B: GoPlus Security Fetch
+        const fetchSecurity = async () => {
+            try {
+                const response = await fetch(`https://api.gopluslabs.io/api/v1/token_security/${CHAIN_ID}?contract_addresses=${normalizedAddress}`);
+
+                if (!response.ok) {
+                    throw new Error(`GoPlus API error: ${response.status}`);
+                }
+
+                const data: GoPlusResponse = await response.json();
+
+                // Validation
+                if (data?.result?.[normalizedAddress]) {
+                    return data.result[normalizedAddress];
+                }
+                return null;
+
+            } catch (err) {
+                console.error('GoPlus Fetch Failed:', err);
+                return null;
+            }
+        };
 
         try {
+            // Run Parallel Requests
+            const [dexResult, securityResult] = await Promise.all([fetchDex(), fetchSecurity()]);
 
-            // --- 2. DEXScreener Fetch (Non-Blocking) ---
-            try {
-                const dexResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${normalizedAddress}`);
-                const dexJson: DexScreenerResponse = await dexResponse.json();
-
-                if (dexJson?.pairs && dexJson.pairs.length > 0) {
-                    // Prioritize Base pair, fallback to first valid pair
-                    const basePair = dexJson.pairs.find(p => p.chainId === 'base');
-                    if (basePair) {
-                        setDexData(basePair);
-                        dexSuccess = true;
-                    } else if (dexJson.pairs[0]) {
-                        setDexData(dexJson.pairs[0]);
-                        dexSuccess = true;
-                    }
-                } else {
-                    console.log('DEXScreener returned no pairs.');
-                }
-            } catch (dexErr) {
-                console.error('DEXScreener Fetch Error:', dexErr);
-                // DO NOT STOP. Continue to GoPlus.
+            // Handle DEX Results
+            if (dexResult) {
+                setDexData(dexResult);
+            } else {
+                // If no DEX data, we don't error out yet, we check security
             }
 
-            // --- 3. GoPlus Security Scan (Critical) ---
-            try {
-                const goPlusResponse = await fetch(`https://api.gopluslabs.io/api/v1/token_security/${CHAIN_ID}?contract_addresses=${normalizedAddress}`);
-                const goPlusJson: GoPlusResponse = await goPlusResponse.json();
-
-                // GoPlus Safety Check
-                const securityResult = goPlusJson?.result?.[normalizedAddress];
-
-                if (securityResult) {
-                    calculateTrustScore(securityResult);
+            // Handle Security Results
+            if (securityResult) {
+                calculateTrustScore(securityResult);
+            } else {
+                // If neither found
+                if (!dexResult) {
+                    setError('No token data found. This address may be a wallet or unlisted.');
                 } else {
-                    // Handle missing security data
-                    if (dexSuccess) {
-                        setError('Security checks unavailable, but token market data found.');
-                    } else {
-                        throw new Error('Token data not found. This may be a wallet address or unlisted token.');
-                    }
-                }
-
-            } catch (gpErr) {
-                console.error('GoPlus Fetch Error:', gpErr);
-                if (dexSuccess) {
-                    setError('Security scan failed, but market data found.');
-                } else {
-                    throw gpErr; // Re-throw to main catch if nothing found
+                    setError('Security data unavailable, but token market data found.');
                 }
             }
 
         } catch (err: unknown) {
-            console.error('Main Check Error:', err);
-            if (err instanceof Error) {
-                setError(err.message);
-            } else {
-                setError('Something went wrong. Please try again.');
-            }
+            console.error('Global Fetch Error:', err);
+            setError('An unexpected error occurred during the scan.');
         } finally {
-            // Absolute Safety: Ensure loading always stops
             setLoading(false);
         }
     };
@@ -308,7 +328,7 @@ const BaseShield: React.FC = () => {
                 )}
 
                 {/* Token Found Card */}
-                {dexData && (
+                {dexData ? (
                     <div style={{
                         backgroundColor: '#16181d',
                         border: '1px solid #27272a',
@@ -360,6 +380,10 @@ const BaseShield: React.FC = () => {
                             )}
                         </div>
                     </div>
+                ) : (
+                    // If analysis exists but no dexdata (e.g. unlisted but security checked), show a placeholder or nothing?
+                    // Currently showing nothing for dex data if null.
+                    null
                 )}
 
                 {/* Security Dashboard */}
