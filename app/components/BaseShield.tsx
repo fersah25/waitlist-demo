@@ -54,117 +54,102 @@ const BaseShield: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [analysis, setAnalysis] = useState<SecurityAnalysis | null>(null);
 
+    // DEX Data State
     const [dexData, setDexData] = useState<DexPair | null>(null);
 
     const CHAIN_ID = '8453'; // Base Network
 
+    // Reset analysis when address changes to prevent stale data display
     useEffect(() => {
         if (analysis && analysis.details.contract_address.toLowerCase() !== contractAddress.toLowerCase()) {
             // Optional: Keep until new search
         }
     }, [contractAddress, analysis]);
 
-    const fetchDexData = async (address: string) => {
-        console.log(`[BaseShield] Fetching DEX Data for: ${address}`);
-        try {
-            const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${address}`, {
-                method: 'GET',
-                mode: 'cors',
-                headers: { 'Accept': 'application/json' }
-            });
-
-            if (!response.ok) {
-                console.warn(`[BaseShield] DEXScreener API failed with status: ${response.status}`);
-                return;
-            }
-
-            const data: DexScreenerResponse = await response.json();
-
-            // Handle unlisted tokens safely
-            if (!data?.pairs || data.pairs.length === 0) {
-                console.log('[BaseShield] No liquidity pairs found.');
-                // We do NOT set an error here, just return, so GoPlus can still run.
-                // The user will see no Dex Card, which implies "Unlisted/No Liquidity".
-                return;
-            }
-
-            const basePair = data.pairs.find(pair => pair.chainId === 'base');
-
-            if (basePair) {
-                setDexData(basePair);
-            } else {
-                const anyPair = data.pairs[0];
-                if (anyPair) setDexData(anyPair);
-            }
-
-        } catch (err: unknown) {
-            console.error('[BaseShield] Critical DEX Fetch Error:', err);
-        }
-    };
-
-    const fetchSecurityData = async () => {
+    const checkToken = async () => {
+        // 1. Validation Logic
         if (!contractAddress) return;
 
-        // 1. Trim & Validate
-        const trimmedAddr = contractAddress.trim().toLowerCase();
-        setCleanAddress(trimmedAddr);
+        // Address Normalization - Absolute Safety
+        const normalizedAddress = contractAddress.trim().toLowerCase();
+        setCleanAddress(normalizedAddress);
 
-        if (!trimmedAddr.startsWith('0x') || trimmedAddr.length !== 42) {
-            setError('Invalid format. Use 0x... (42 chars)');
+        if (!normalizedAddress.startsWith('0x') || normalizedAddress.length !== 42) {
+            setError('Please enter a valid contract address (0x...)');
             return;
         }
 
+        // Reset State
         setLoading(true);
         setError(null);
         setAnalysis(null);
         setDexData(null);
 
+        // Track local success to handle partial failures
+        let dexSuccess = false;
+
         try {
-            // 2. Fetch DEX Data (Best Effort)
-            await fetchDexData(trimmedAddr);
 
-            // 3. Fetch Security Data (Priority)
-            console.log(`[BaseShield] Fetching GoPlus Security Data for: ${trimmedAddr}`);
-            const response = await fetch(`https://api.gopluslabs.io/api/v1/token_security/${CHAIN_ID}?contract_addresses=${trimmedAddr}`);
+            // --- 2. DEXScreener Fetch (Non-Blocking) ---
+            try {
+                const dexResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${normalizedAddress}`);
+                const dexJson: DexScreenerResponse = await dexResponse.json();
 
-            if (!response.ok) throw new Error(`Security API Error: ${response.status}`);
-
-            const data: GoPlusResponse = await response.json();
-
-            if (data?.code !== 1 || !data?.result) {
-                throw new Error(data?.message || 'Failed to fetch security data.');
+                if (dexJson?.pairs && dexJson.pairs.length > 0) {
+                    // Prioritize Base pair, fallback to first valid pair
+                    const basePair = dexJson.pairs.find(p => p.chainId === 'base');
+                    if (basePair) {
+                        setDexData(basePair);
+                        dexSuccess = true;
+                    } else if (dexJson.pairs[0]) {
+                        setDexData(dexJson.pairs[0]);
+                        dexSuccess = true;
+                    }
+                } else {
+                    console.log('DEXScreener returned no pairs.');
+                }
+            } catch (dexErr) {
+                console.error('DEXScreener Fetch Error:', dexErr);
+                // DO NOT STOP. Continue to GoPlus.
             }
 
-            const tokenData = data.result?.[trimmedAddr];
+            // --- 3. GoPlus Security Scan (Critical) ---
+            try {
+                const goPlusResponse = await fetch(`https://api.gopluslabs.io/api/v1/token_security/${CHAIN_ID}?contract_addresses=${normalizedAddress}`);
+                const goPlusJson: GoPlusResponse = await goPlusResponse.json();
 
-            // Handle Wallets vs Unlisted Tokens
-            if (!tokenData) {
-                // Check if it looks like a wallet (Code 1 but no result usually means address has no token contract code)
-                // But GoPlus explicitly returns empty for EOAs (Externally Owned Accounts / Wallets)
-                // If we also found NO DEX data, it's likely a wallet or fresh address.
-                if (!dexData) {
-                    throw new Error('Address has no token data. Is this a wallet?');
+                // GoPlus Safety Check
+                const securityResult = goPlusJson?.result?.[normalizedAddress];
+
+                if (securityResult) {
+                    calculateTrustScore(securityResult);
                 } else {
-                    setError('Security info unavailable, but market data found.');
-                    return;
+                    // Handle missing security data
+                    if (dexSuccess) {
+                        setError('Security checks unavailable, but token market data found.');
+                    } else {
+                        throw new Error('Token data not found. This may be a wallet address or unlisted token.');
+                    }
+                }
+
+            } catch (gpErr) {
+                console.error('GoPlus Fetch Error:', gpErr);
+                if (dexSuccess) {
+                    setError('Security scan failed, but market data found.');
+                } else {
+                    throw gpErr; // Re-throw to main catch if nothing found
                 }
             }
-
-            calculateTrustScore(tokenData);
 
         } catch (err: unknown) {
-            console.error('[BaseShield] Security Scan Error:', err);
-
-            if (dexData) {
-                setError('Security info unavailable, but market data found.');
+            console.error('Main Check Error:', err);
+            if (err instanceof Error) {
+                setError(err.message);
             } else {
-                if (err instanceof Error) {
-                    setError(err.message);
-                } else {
-                    setError('Unknown error during scan.');
-                }
+                setError('Something went wrong. Please try again.');
             }
         } finally {
+            // Absolute Safety: Ensure loading always stops
             setLoading(false);
         }
     };
@@ -254,7 +239,7 @@ const BaseShield: React.FC = () => {
                         />
                     </div>
                     <button
-                        onClick={fetchSecurityData}
+                        onClick={checkToken}
                         disabled={loading}
                         style={{
                             backgroundColor: '#0052FF',
@@ -346,7 +331,7 @@ const BaseShield: React.FC = () => {
                                 </div>
                             </div>
 
-                            {dexData.liquidity?.usd !== undefined && (
+                            {dexData.liquidity?.usd !== undefined ? (
                                 <div style={{
                                     padding: '6px 10px',
                                     borderRadius: '8px',
@@ -358,6 +343,19 @@ const BaseShield: React.FC = () => {
                                     border: `1px solid ${dexData.liquidity.usd > 10000 ? 'rgba(74, 222, 128, 0.2)' : 'rgba(250, 204, 21, 0.2)'}`
                                 }}>
                                     Liq: ${(dexData.liquidity.usd / 1000).toFixed(1)}K
+                                </div>
+                            ) : (
+                                <div style={{
+                                    padding: '6px 10px',
+                                    borderRadius: '8px',
+                                    fontSize: '11px',
+                                    fontWeight: 'bold',
+                                    textTransform: 'uppercase',
+                                    backgroundColor: 'rgba(113, 113, 122, 0.1)',
+                                    color: '#71717a',
+                                    border: '1px solid rgba(113, 113, 122, 0.2)'
+                                }}>
+                                    Liq: Unknown
                                 </div>
                             )}
                         </div>
