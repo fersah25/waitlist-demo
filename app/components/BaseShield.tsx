@@ -117,10 +117,11 @@ const BaseShield: React.FC = () => {
     const handleSendMessage = async () => {
         if (!chatInput.trim()) return;
 
-        // 1. Add User Message
-        const userMsg = { role: 'user' as const, content: chatInput };
-        setChatMessages(prev => [...prev, userMsg]);
         const userQuestion = chatInput;
+        const newHistory = [...chatMessages, { role: 'user' as const, content: userQuestion }];
+
+        // Update UI immediately
+        setChatMessages(newHistory);
         setChatInput('');
         setIsChatLoading(true);
 
@@ -131,8 +132,10 @@ const BaseShield: React.FC = () => {
                 throw new Error('API Key missing');
             }
 
-            // 2. Construct Context
-            let context = "You are BaseShield AI, a crypto security expert on Base Network. ";
+            // 1. Construct System Instruction & Context
+            let systemInstruction = `You are a helpful and cool AI assistant integrated into the BaseShield platform. You can answer any questions, write code, tell jokes, or discuss crypto. 
+            
+            Current Context: `;
 
             if (dexData) {
                 const price = dexData.priceUsd ? `$${dexData.priceUsd}` : 'Unknown';
@@ -141,21 +144,29 @@ const BaseShield: React.FC = () => {
                 const name = dexData.baseToken.name;
                 const symbol = dexData.baseToken.symbol;
 
-                context += `The user is viewing a token named ${name} (${symbol}). Price: ${price}. 24h Volume: ${vol24h}. Liquidity: ${liq}. `;
+                systemInstruction += `The user is currently viewing a token named ${name} (${symbol}). Price: ${price}. 24h Volume: ${vol24h}. Liquidity: ${liq}. `;
             } else {
-                context += "The user has not scanned a valid token yet. ";
+                systemInstruction += "The user is not viewing any specific token right now. ";
             }
 
             if (analysis) {
-                const honeypot = analysis.details.is_honeypot === '1' ? "YES (DANGEROUS)" : "NO (Safe)";
+                const honeypot = analysis.details.is_honeypot === '1' ? "YES" : "NO";
                 const buyTax = (parseFloat(analysis.details.buy_tax) * 100).toFixed(1) + "%";
                 const sellTax = (parseFloat(analysis.details.sell_tax) * 100).toFixed(1) + "%";
-                const renounced = analysis.isRenounced ? "Yes (Safe)" : "No (Risky)";
+                const renounced = analysis.isRenounced ? "Yes" : "No";
 
-                context += `Security Scan Results: Honeypot: ${honeypot}. Buy Tax: ${buyTax}. Sell Tax: ${sellTax}. Ownership Renounced: ${renounced}. Trust Score: ${analysis.trustScore}/100. `;
+                systemInstruction += `Security Scan Results: Honeypot: ${honeypot}. Buy/Sell Tax: ${buyTax}/${sellTax}. Ownership Renounced: ${renounced}. Trust Score: ${analysis.trustScore}/100. `;
             }
 
-            context += `User Question: "${userQuestion}". Answer briefly and professionally based on this data.`;
+            systemInstruction += `
+            
+            If the user asks about the token, use the context. If they ask about something else, answer normally. Be concise, witty, and helpful.`;
+
+            // 2. Format History for Gemini (limiting to last 10 messages for efficiency)
+            const historyForApi = newHistory.slice(-10).map(msg => ({
+                role: msg.role === 'user' ? 'user' : 'model',
+                parts: [{ text: msg.content }]
+            }));
 
             // 3. Call Gemini API
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
@@ -164,9 +175,10 @@ const BaseShield: React.FC = () => {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    contents: [{
-                        parts: [{ text: context }]
-                    }]
+                    contents: historyForApi,
+                    systemInstruction: {
+                        parts: [{ text: systemInstruction }]
+                    }
                 })
             });
 
@@ -182,7 +194,7 @@ const BaseShield: React.FC = () => {
 
         } catch (error) {
             console.error("AI Chat Error:", error);
-            const errorMsg = "AI is sleeping right now, try again later.";
+            const errorMsg = "AI is sleeping right now (Check API Key).";
             setChatMessages(prev => [...prev, { role: 'assistant', content: errorMsg }]);
         } finally {
             setIsChatLoading(false);
@@ -669,8 +681,8 @@ const BaseShield: React.FC = () => {
                     position: 'fixed',
                     bottom: '90px',
                     right: '20px',
-                    width: '320px',
-                    height: '450px',
+                    width: '380px', // Increased width
+                    height: '600px', // Increased height
                     backgroundColor: '#16181d',
                     borderRadius: '16px',
                     border: '1px solid #27272a',
