@@ -195,8 +195,9 @@ const BaseShield: React.FC = () => {
             }
             finalPrompt += `User Question: ${userQuestion}`;
 
-            // 4. API Call (Simplified Body)
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+            // 4. API Call (Strict v1 Endpoint & Body)
+            // Using v1 endpoint as requested for stability
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
