@@ -78,6 +78,7 @@ const BaseShield: React.FC = () => {
     // AI Chat State
     const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
     const [chatInput, setChatInput] = useState<string>('');
+    const [isChatLoading, setIsChatLoading] = useState<boolean>(false);
     const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([
         { role: 'assistant', content: 'Hi! I am BaseShield AI. Ask me anything about the token you just scanned!' }
     ]);
@@ -113,14 +114,79 @@ const BaseShield: React.FC = () => {
         setIsChatOpen(!isChatOpen);
     };
 
-    const handleSendMessage = () => {
+    const handleSendMessage = async () => {
         if (!chatInput.trim()) return;
 
-        // Add user message immediately
+        // 1. Add User Message
         const userMsg = { role: 'user' as const, content: chatInput };
         setChatMessages(prev => [...prev, userMsg]);
+        const userQuestion = chatInput;
         setChatInput('');
+        setIsChatLoading(true);
 
+        try {
+            const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+
+            if (!apiKey) {
+                throw new Error('API Key missing');
+            }
+
+            // 2. Construct Context
+            let context = "You are BaseShield AI, a crypto security expert on Base Network. ";
+
+            if (dexData) {
+                const price = dexData.priceUsd ? `$${dexData.priceUsd}` : 'Unknown';
+                const vol24h = dexData.volume?.h24 ? `$${dexData.volume.h24.toLocaleString()}` : 'Unknown';
+                const liq = dexData.liquidity?.usd ? `$${dexData.liquidity.usd.toLocaleString()}` : 'Unknown';
+                const name = dexData.baseToken.name;
+                const symbol = dexData.baseToken.symbol;
+
+                context += `The user is viewing a token named ${name} (${symbol}). Price: ${price}. 24h Volume: ${vol24h}. Liquidity: ${liq}. `;
+            } else {
+                context += "The user has not scanned a valid token yet. ";
+            }
+
+            if (analysis) {
+                const honeypot = analysis.details.is_honeypot === '1' ? "YES (DANGEROUS)" : "NO (Safe)";
+                const buyTax = (parseFloat(analysis.details.buy_tax) * 100).toFixed(1) + "%";
+                const sellTax = (parseFloat(analysis.details.sell_tax) * 100).toFixed(1) + "%";
+                const renounced = analysis.isRenounced ? "Yes (Safe)" : "No (Risky)";
+
+                context += `Security Scan Results: Honeypot: ${honeypot}. Buy Tax: ${buyTax}. Sell Tax: ${sellTax}. Ownership Renounced: ${renounced}. Trust Score: ${analysis.trustScore}/100. `;
+            }
+
+            context += `User Question: "${userQuestion}". Answer briefly and professionally based on this data.`;
+
+            // 3. Call Gemini API
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{ text: context }]
+                    }]
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`API Error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const aiText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't generate a response.";
+
+            // 4. Add AI Message
+            setChatMessages(prev => [...prev, { role: 'assistant', content: aiText }]);
+
+        } catch (error) {
+            console.error("AI Chat Error:", error);
+            const errorMsg = "AI is sleeping right now, try again later.";
+            setChatMessages(prev => [...prev, { role: 'assistant', content: errorMsg }]);
+        } finally {
+            setIsChatLoading(false);
+        }
     };
 
     const checkToken = async () => {
@@ -661,6 +727,20 @@ const BaseShield: React.FC = () => {
                                 {msg.content}
                             </div>
                         ))}
+                        {isChatLoading && (
+                            <div style={{
+                                alignSelf: 'flex-start',
+                                backgroundColor: '#27272a',
+                                color: '#a1a1aa',
+                                padding: '10px 14px',
+                                borderRadius: '12px',
+                                borderBottomLeftRadius: '2px',
+                                fontSize: '12px',
+                                fontStyle: 'italic'
+                            }}>
+                                Thinking...
+                            </div>
+                        )}
                     </div>
 
                     {/* Input Area */}
@@ -687,11 +767,13 @@ const BaseShield: React.FC = () => {
                                 fontSize: '12px',
                                 outline: 'none'
                             }}
+                            disabled={isChatLoading}
                         />
                         <button
                             onClick={handleSendMessage}
+                            disabled={isChatLoading}
                             style={{
-                                backgroundColor: '#0052FF',
+                                backgroundColor: isChatLoading ? '#27272a' : '#0052FF',
                                 border: 'none',
                                 borderRadius: '8px',
                                 padding: '8px 12px',
