@@ -89,6 +89,11 @@ interface GeminiCandidate {
 interface GeminiResponse {
     candidates?: GeminiCandidate[];
     promptFeedback?: unknown;
+    error?: {
+        code: number;
+        message: string;
+        status: string;
+    };
 }
 
 // Chat Message Type
@@ -145,7 +150,7 @@ const BaseShield: React.FC = () => {
         setIsChatOpen(!isChatOpen);
     };
 
-    // --- AI Logic ---
+    // --- AI Logic (Debugging Mode) ---
     const handleSendMessage = async () => {
         if (!chatInput.trim()) return;
 
@@ -158,15 +163,16 @@ const BaseShield: React.FC = () => {
         setIsChatLoading(true);
 
         try {
-            // 1. Authenticate
+            // 1. Key Retrieval & Debug Log
             const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
             console.log('Gemini Auth Check:', apiKey ? 'Key Found' : 'Key Missing');
 
+            // 2. Strict Check: If missing, throw immediately
             if (!apiKey) {
-                throw new Error('API Key not found in Environment Variables. Please redeploy.');
+                throw new Error('Key is missing in Env Variables!');
             }
 
-            // 2. Build Context
+            // 3. Construct System Prompt & Context
             let systemInstruction = "You are a helpful, witty, and smart AI assistant. Answer any question the user asks.";
             let contextData = "";
 
@@ -180,30 +186,31 @@ const BaseShield: React.FC = () => {
                 contextData += `Trust Score: ${analysis.trustScore}/100. Honeypot: ${analysis.details.is_honeypot === '1' ? 'YES' : 'NO'}. `;
             }
 
+            // Prepend context to user prompt for simplicity in this specific debugging request
+            // User requested: JSON.stringify({ contents: [{ parts: [{ text: userMessage }] }] })
+            // So we combine everything into one text block.
+            let finalPrompt = `${systemInstruction}\n\n`;
             if (contextData) {
-                systemInstruction += `\n\nContext (for reference only): ${contextData}`;
+                finalPrompt += `Context: ${contextData}\n\n`;
             }
+            finalPrompt += `User Question: ${userQuestion}`;
 
-            // 3. Prepare History for Details
-            const historyForApi = newHistory.slice(-10).map(msg => ({
-                role: msg.role === 'user' ? 'user' : 'model',
-                parts: [{ text: msg.content }]
-            }));
-
-            // 4. API Call
+            // 4. API Call (Simplified Body)
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    contents: historyForApi,
-                    systemInstruction: {
-                        parts: [{ text: systemInstruction }]
-                    }
+                    contents: [{
+                        parts: [{ text: finalPrompt }]
+                    }]
                 })
             });
 
             if (!response.ok) {
-                throw new Error(`API Error: ${response.status}`);
+                // 5. Parse Actual Error
+                const errorData = await response.json() as GeminiResponse;
+                const errorMessage = errorData.error?.message || `API Error: ${response.status} ${response.statusText}`;
+                throw new Error(errorMessage);
             }
 
             const data: GeminiResponse = await response.json();
@@ -214,14 +221,12 @@ const BaseShield: React.FC = () => {
         } catch (error) {
             console.error("AI Chat Error:", error);
 
-            let errorMsg = "AI is sleeping right now, try again later.";
+            let displayError = "AI is sleeping (Unknown Error)";
             if (error instanceof Error) {
-                if (error.message.includes('API Key')) {
-                    errorMsg = error.message;
-                }
+                displayError = `Error: ${error.message}`;
             }
 
-            setChatMessages(prev => [...prev, { role: 'assistant', content: errorMsg }]);
+            setChatMessages(prev => [...prev, { role: 'assistant', content: displayError }]);
         } finally {
             setIsChatLoading(false);
         }
