@@ -2,7 +2,9 @@
 
 import React, { useState } from 'react';
 
-// Types for GoPlus Response
+// --- Types & Interfaces ---
+
+// GoPlus Security Types
 interface LpHolder {
     address: string;
     percent: string;
@@ -20,7 +22,7 @@ interface GoPlusTokenSecurity {
     lp_holder_count: string; // number as string
     is_open_source: string; // "1" or "0"
     lp_holders?: LpHolder[]; // Array of LP holders
-    [key: string]: unknown; // Allow other properties for raw display
+    [key: string]: unknown; // Allow other properties
 }
 
 interface GoPlusResponse {
@@ -29,7 +31,7 @@ interface GoPlusResponse {
     result: Record<string, GoPlusTokenSecurity>;
 }
 
-// Types for DEXScreener Response based on Official Docs
+// DEXScreener Types
 interface DexPair {
     chainId: string;
     dexId: string;
@@ -60,14 +62,43 @@ interface DexScreenerResponse {
     pairs: DexPair[] | null;
 }
 
+// Analysis State Type
 interface SecurityAnalysis {
     trustScore: number;
     details: GoPlusTokenSecurity;
     isRenounced: boolean;
 }
 
+// Gemini API Types
+interface GeminiPart {
+    text: string;
+}
+
+interface GeminiContent {
+    parts: GeminiPart[];
+    role?: string;
+}
+
+interface GeminiCandidate {
+    content: GeminiContent;
+    finishReason?: string;
+    index?: number;
+    safetyRatings?: unknown[];
+}
+
+interface GeminiResponse {
+    candidates?: GeminiCandidate[];
+    promptFeedback?: unknown;
+}
+
+// Chat Message Type
+interface ChatMessage {
+    role: 'user' | 'assistant';
+    content: string;
+}
+
 const BaseShield: React.FC = () => {
-    // State
+    // --- State ---
     const [contractAddress, setContractAddress] = useState<string>('');
     const [cleanAddress, setCleanAddress] = useState<string>('');
     const [loading, setLoading] = useState<boolean>(false);
@@ -79,11 +110,11 @@ const BaseShield: React.FC = () => {
     const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
     const [chatInput, setChatInput] = useState<string>('');
     const [isChatLoading, setIsChatLoading] = useState<boolean>(false);
-    const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
         { role: 'assistant', content: 'Hi! I am BaseShield AI. Ask me anything about the token you just scanned!' }
     ]);
 
-    // Constants
+    // --- Constants ---
     const CHAIN_ID = '8453'; // Base Network
     const BURN_ADDRESSES = [
         '0x0000000000000000000000000000000000000000',
@@ -91,15 +122,15 @@ const BaseShield: React.FC = () => {
         '0xdead000000000000000042069420694206942069'
     ];
 
+    // --- Helper Functions ---
     const formatPrice = (priceStr: string | undefined): string => {
         if (!priceStr) return '0.00';
         const price = parseFloat(priceStr);
         if (isNaN(price)) return '0.00';
 
-        // Use greater precision for meme tokens
         return price.toLocaleString('en-US', {
             minimumFractionDigits: 2,
-            maximumFractionDigits: 14 // Increased precision
+            maximumFractionDigits: 14
         });
     };
 
@@ -114,32 +145,31 @@ const BaseShield: React.FC = () => {
         setIsChatOpen(!isChatOpen);
     };
 
+    // --- AI Logic ---
     const handleSendMessage = async () => {
         if (!chatInput.trim()) return;
 
         const userQuestion = chatInput;
-        const newHistory = [...chatMessages, { role: 'user' as const, content: userQuestion }];
+        const newHistory: ChatMessage[] = [...chatMessages, { role: 'user', content: userQuestion }];
 
-        // Update UI immediately (with user message)
+        // Update UI immediately
         setChatMessages(newHistory);
         setChatInput('');
         setIsChatLoading(true);
 
         try {
-            // 1. Key Retrieval & Debug Log
+            // 1. Authenticate
             const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
             console.log('Gemini Auth Check:', apiKey ? 'Key Found' : 'Key Missing');
 
-            // 2. Error Handling for Missing Key
             if (!apiKey) {
                 throw new Error('API Key not found in Environment Variables. Please redeploy.');
             }
 
-            // 3. Construct System Prompt (User Defined)
+            // 2. Build Context
             let systemInstruction = "You are a helpful, witty, and smart AI assistant. Answer any question the user asks.";
-
-            // Optional: Append Context as background info
             let contextData = "";
+
             if (dexData) {
                 const price = dexData.priceUsd ? `$${dexData.priceUsd}` : 'Unknown';
                 const name = dexData.baseToken.name;
@@ -154,18 +184,16 @@ const BaseShield: React.FC = () => {
                 systemInstruction += `\n\nContext (for reference only): ${contextData}`;
             }
 
-            // 4. Format History
+            // 3. Prepare History for Details
             const historyForApi = newHistory.slice(-10).map(msg => ({
                 role: msg.role === 'user' ? 'user' : 'model',
                 parts: [{ text: msg.content }]
             }));
 
-            // 5. Fetch Logic (Correct URL with Key)
+            // 4. API Call
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     contents: historyForApi,
                     systemInstruction: {
@@ -178,26 +206,29 @@ const BaseShield: React.FC = () => {
                 throw new Error(`API Error: ${response.status}`);
             }
 
-            const data = await response.json();
+            const data: GeminiResponse = await response.json();
             const aiText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't generate a response.";
 
-            // 6. Add AI Message
             setChatMessages(prev => [...prev, { role: 'assistant', content: aiText }]);
 
-        } catch (error: any) {
+        } catch (error) {
             console.error("AI Chat Error:", error);
-            // Return specific error if it's the key issue, else generic
-            const errorMsg = error.message.includes('API Key')
-                ? error.message
-                : "AI is sleeping right now, try again later.";
+
+            let errorMsg = "AI is sleeping right now, try again later.";
+            if (error instanceof Error) {
+                if (error.message.includes('API Key')) {
+                    errorMsg = error.message;
+                }
+            }
+
             setChatMessages(prev => [...prev, { role: 'assistant', content: errorMsg }]);
         } finally {
             setIsChatLoading(false);
         }
     };
 
+    // --- Token Scan Logic ---
     const checkToken = async () => {
-        // 1. Address Normalization
         const normalizedAddress = contractAddress.trim().toLowerCase();
 
         if (!normalizedAddress.startsWith('0x') || normalizedAddress.length !== 42) {
@@ -211,58 +242,34 @@ const BaseShield: React.FC = () => {
         setAnalysis(null);
         setDexData(null);
 
-        // Define Parallel Tasks
-
-        // Task A: DEXScreener Fetch (Official Endpoint & Deep Safety)
-        const fetchDex = async () => {
+        // Task A: DEXScreener Fetch
+        const fetchDex = async (): Promise<DexPair | null> => {
             try {
                 const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${normalizedAddress}`);
-
-                if (!response.ok) {
-                    console.warn(`DEXScreener API error: ${response.status}`);
-                    return null;
-                }
+                if (!response.ok) return null;
 
                 const data: DexScreenerResponse = await response.json();
+                if (!data || !data.pairs || data.pairs.length === 0) return null;
 
-                // Deep Safety Check
-                if (!data || !data.pairs || data.pairs.length === 0) {
-                    console.log('No liquidity pairs found on DEXScreener.');
-                    return null;
-                }
-
-                // Filter for Base network specifically
                 const basePair = data.pairs.find(p => p.chainId === 'base');
-
-                if (basePair) {
-                    return basePair;
-                } else {
-                    return null;
-                }
-
+                return basePair || null;
             } catch (err) {
                 console.error('DEXScreener Fetch Failed:', err);
                 return null;
             }
         };
 
-        // Task B: GoPlus Security Fetch (Independent)
-        const fetchSecurity = async () => {
+        // Task B: GoPlus Security Fetch
+        const fetchSecurity = async (): Promise<GoPlusTokenSecurity | null> => {
             try {
                 const response = await fetch(`https://api.gopluslabs.io/api/v1/token_security/${CHAIN_ID}?contract_addresses=${normalizedAddress}`);
-
-                if (!response.ok) {
-                    throw new Error(`GoPlus API error: ${response.status}`);
-                }
+                if (!response.ok) throw new Error(`GoPlus API error: ${response.status}`);
 
                 const data: GoPlusResponse = await response.json();
-
-                // Validation
                 if (data?.result?.[normalizedAddress]) {
                     return data.result[normalizedAddress];
                 }
                 return null;
-
             } catch (err) {
                 console.error('GoPlus Fetch Failed:', err);
                 return null;
@@ -270,19 +277,13 @@ const BaseShield: React.FC = () => {
         };
 
         try {
-            // Run Parallel Requests
             const [dexResult, securityResult] = await Promise.all([fetchDex(), fetchSecurity()]);
 
-            // Handle DEX Results
-            if (dexResult) {
-                setDexData(dexResult);
-            }
+            if (dexResult) setDexData(dexResult);
 
-            // Handle Security Results
             if (securityResult) {
                 calculateTrustScore(securityResult);
             } else {
-                // Determine Error Message
                 if (!dexResult) {
                     setError('No token data found. This address may be a wallet or unlisted.');
                 } else {
@@ -290,7 +291,7 @@ const BaseShield: React.FC = () => {
                 }
             }
 
-        } catch (err: unknown) {
+        } catch (err) {
             console.error('Global Fetch Error:', err);
             setError('An unexpected error occurred during the scan.');
         } finally {
@@ -301,7 +302,6 @@ const BaseShield: React.FC = () => {
     const calculateTrustScore = (data: GoPlusTokenSecurity) => {
         let score = 100;
 
-        // --- Scoring Logic ---
         if (data?.is_honeypot === '1') score -= 50;
 
         const buyTax = parseFloat(data?.buy_tax || '0');
@@ -310,7 +310,6 @@ const BaseShield: React.FC = () => {
 
         if (data?.is_proxy === '1') score -= 10;
 
-        // Ownership Logic
         const isRenounced = !data?.owner_address || BURN_ADDRESSES.includes(data.owner_address.toLowerCase());
         if (!isRenounced) score -= 5;
 
