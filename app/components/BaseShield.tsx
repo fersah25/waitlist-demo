@@ -120,55 +120,47 @@ const BaseShield: React.FC = () => {
         const userQuestion = chatInput;
         const newHistory = [...chatMessages, { role: 'user' as const, content: userQuestion }];
 
-        // Update UI immediately
+        // Update UI immediately (with user message)
         setChatMessages(newHistory);
         setChatInput('');
         setIsChatLoading(true);
 
         try {
+            // 1. Key Retrieval & Debug Log
             const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+            console.log('Gemini Auth Check:', apiKey ? 'Key Found' : 'Key Missing');
 
+            // 2. Error Handling for Missing Key
             if (!apiKey) {
-                throw new Error('API Key missing');
+                throw new Error('API Key not found in Environment Variables. Please redeploy.');
             }
 
-            // 1. Construct System Instruction & Context
-            let systemInstruction = `You are a helpful and cool AI assistant integrated into the BaseShield platform. You can answer any questions, write code, tell jokes, or discuss crypto. 
-            
-            Current Context: `;
+            // 3. Construct System Prompt (User Defined)
+            let systemInstruction = "You are a helpful, witty, and smart AI assistant. Answer any question the user asks.";
 
+            // Optional: Append Context as background info
+            let contextData = "";
             if (dexData) {
                 const price = dexData.priceUsd ? `$${dexData.priceUsd}` : 'Unknown';
-                const vol24h = dexData.volume?.h24 ? `$${dexData.volume.h24.toLocaleString()}` : 'Unknown';
-                const liq = dexData.liquidity?.usd ? `$${dexData.liquidity.usd.toLocaleString()}` : 'Unknown';
                 const name = dexData.baseToken.name;
                 const symbol = dexData.baseToken.symbol;
-
-                systemInstruction += `The user is currently viewing a token named ${name} (${symbol}). Price: ${price}. 24h Volume: ${vol24h}. Liquidity: ${liq}. `;
-            } else {
-                systemInstruction += "The user is not viewing any specific token right now. ";
+                contextData += `Token: ${name} (${symbol}). Price: ${price}. `;
             }
-
             if (analysis) {
-                const honeypot = analysis.details.is_honeypot === '1' ? "YES" : "NO";
-                const buyTax = (parseFloat(analysis.details.buy_tax) * 100).toFixed(1) + "%";
-                const sellTax = (parseFloat(analysis.details.sell_tax) * 100).toFixed(1) + "%";
-                const renounced = analysis.isRenounced ? "Yes" : "No";
-
-                systemInstruction += `Security Scan Results: Honeypot: ${honeypot}. Buy/Sell Tax: ${buyTax}/${sellTax}. Ownership Renounced: ${renounced}. Trust Score: ${analysis.trustScore}/100. `;
+                contextData += `Trust Score: ${analysis.trustScore}/100. Honeypot: ${analysis.details.is_honeypot === '1' ? 'YES' : 'NO'}. `;
             }
 
-            systemInstruction += `
-            
-            If the user asks about the token, use the context. If they ask about something else, answer normally. Be concise, witty, and helpful.`;
+            if (contextData) {
+                systemInstruction += `\n\nContext (for reference only): ${contextData}`;
+            }
 
-            // 2. Format History for Gemini (limiting to last 10 messages for efficiency)
+            // 4. Format History
             const historyForApi = newHistory.slice(-10).map(msg => ({
                 role: msg.role === 'user' ? 'user' : 'model',
                 parts: [{ text: msg.content }]
             }));
 
-            // 3. Call Gemini API
+            // 5. Fetch Logic (Correct URL with Key)
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
                 method: 'POST',
                 headers: {
@@ -189,12 +181,15 @@ const BaseShield: React.FC = () => {
             const data = await response.json();
             const aiText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't generate a response.";
 
-            // 4. Add AI Message
+            // 6. Add AI Message
             setChatMessages(prev => [...prev, { role: 'assistant', content: aiText }]);
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("AI Chat Error:", error);
-            const errorMsg = "AI is sleeping right now (Check API Key).";
+            // Return specific error if it's the key issue, else generic
+            const errorMsg = error.message.includes('API Key')
+                ? error.message
+                : "AI is sleeping right now, try again later.";
             setChatMessages(prev => [...prev, { role: 'assistant', content: errorMsg }]);
         } finally {
             setIsChatLoading(false);
