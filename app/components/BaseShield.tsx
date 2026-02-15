@@ -173,7 +173,7 @@ const BaseShield: React.FC = () => {
             }
 
             // 3. Construct System Prompt & Context
-            let systemInstruction = "You are a helpful, witty, and smart AI assistant. Answer any question the user asks.";
+            const systemInstruction = "You are a helpful, witty, and smart AI assistant. Answer any question the user asks.";
             let contextData = "";
 
             if (dexData) {
