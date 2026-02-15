@@ -75,6 +75,13 @@ const BaseShield: React.FC = () => {
     const [analysis, setAnalysis] = useState<SecurityAnalysis | null>(null);
     const [dexData, setDexData] = useState<DexPair | null>(null);
 
+    // AI Chat State
+    const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
+    const [chatInput, setChatInput] = useState<string>('');
+    const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([
+        { role: 'assistant', content: 'Hi! I am BaseShield AI. Ask me anything about the token you just scanned!' }
+    ]);
+
     // Constants
     const CHAIN_ID = '8453'; // Base Network
     const BURN_ADDRESSES = [
@@ -100,6 +107,20 @@ const BaseShield: React.FC = () => {
         if (vol >= 1000000) return `$${(vol / 1000000).toFixed(1)}M`;
         if (vol >= 1000) return `$${(vol / 1000).toFixed(1)}K`;
         return `$${vol.toFixed(0)}`;
+    };
+
+    const toggleChat = () => {
+        setIsChatOpen(!isChatOpen);
+    };
+
+    const handleSendMessage = () => {
+        if (!chatInput.trim()) return;
+
+        // Add user message immediately
+        const userMsg = { role: 'user' as const, content: chatInput };
+        setChatMessages(prev => [...prev, userMsg]);
+        setChatInput('');
+
     };
 
     const checkToken = async () => {
@@ -573,6 +594,150 @@ const BaseShield: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {/* --- AI Chat Interface --- */}
+
+            {/* Chat Window */}
+            {isChatOpen && (
+                <div style={{
+                    position: 'fixed',
+                    bottom: '90px',
+                    right: '20px',
+                    width: '320px',
+                    height: '450px',
+                    backgroundColor: '#16181d',
+                    borderRadius: '16px',
+                    border: '1px solid #27272a',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    zIndex: 1000,
+                    overflow: 'hidden',
+                    fontFamily: 'inherit'
+                }}>
+                    {/* Header */}
+                    <div style={{
+                        padding: '16px',
+                        borderBottom: '1px solid #27272a',
+                        backgroundColor: '#0a0b0d',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px'
+                    }}>
+                        <div style={{
+                            width: '10px',
+                            height: '10px',
+                            backgroundColor: '#0052FF',
+                            borderRadius: '50%',
+                            boxShadow: '0 0 8px #0052FF'
+                        }}></div>
+                        <span style={{ fontWeight: 'bold', fontSize: '14px', color: 'white' }}>BaseShield AI</span>
+                        <div style={{ marginLeft: 'auto', cursor: 'pointer', fontSize: '18px', color: '#71717a' }} onClick={() => setIsChatOpen(false)}>×</div>
+                    </div>
+
+                    {/* Messages Area */}
+                    <div style={{
+                        flex: 1,
+                        padding: '16px',
+                        overflowY: 'auto',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px',
+                        backgroundColor: '#16181d'
+                    }}>
+                        {chatMessages.map((msg, idx) => (
+                            <div key={idx} style={{
+                                alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                                maxWidth: '85%',
+                                backgroundColor: msg.role === 'user' ? '#0052FF' : '#27272a',
+                                color: 'white',
+                                padding: '10px 14px',
+                                borderRadius: '12px',
+                                borderBottomRightRadius: msg.role === 'user' ? '2px' : '12px',
+                                borderBottomLeftRadius: msg.role === 'assistant' ? '2px' : '12px',
+                                fontSize: '13px',
+                                lineHeight: '1.4'
+                            }}>
+                                {msg.content}
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Input Area */}
+                    <div style={{
+                        padding: '12px',
+                        borderTop: '1px solid #27272a',
+                        backgroundColor: '#0a0b0d',
+                        display: 'flex',
+                        gap: '8px'
+                    }}>
+                        <input
+                            type="text"
+                            value={chatInput}
+                            onChange={(e) => setChatInput(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                            placeholder="Ask about this token..."
+                            style={{
+                                flex: 1,
+                                backgroundColor: '#18181b',
+                                border: '1px solid #27272a',
+                                borderRadius: '8px',
+                                padding: '8px 12px',
+                                color: 'white',
+                                fontSize: '12px',
+                                outline: 'none'
+                            }}
+                        />
+                        <button
+                            onClick={handleSendMessage}
+                            style={{
+                                backgroundColor: '#0052FF',
+                                border: 'none',
+                                borderRadius: '8px',
+                                padding: '8px 12px',
+                                cursor: 'pointer',
+                                color: 'white',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}
+                        >
+                            ➤
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Floating Action Button (FAB) */}
+            <button
+                onClick={toggleChat}
+                style={{
+                    position: 'fixed',
+                    bottom: '20px',
+                    right: '20px',
+                    backgroundColor: '#0052FF',
+                    color: 'white',
+                    width: '56px',
+                    height: '56px',
+                    borderRadius: '50%',
+                    border: 'none',
+                    boxShadow: '0 4px 12px rgba(0, 82, 255, 0.4)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000,
+                    transition: 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                    transform: isChatOpen ? 'rotate(90deg)' : 'rotate(0deg)'
+                }}
+            >
+                {isChatOpen ? (
+                    <span style={{ fontSize: '24px', lineHeight: 1 }}>✕</span>
+                ) : (
+                    <span style={{ fontSize: '24px', lineHeight: 1 }}>💬</span>
+                )}
+            </button>
+
         </div>
     );
 };
