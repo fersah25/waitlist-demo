@@ -10,9 +10,7 @@ export function RootProvider({ children }: { children: ReactNode }) {
     const init = async () => {
       try {
         await sdk.actions.ready();
-      } catch (e) {
-        console.error(e);
-      }
+      } catch (e) { console.error(e); }
     };
     init();
   }, []);
@@ -22,7 +20,10 @@ export function RootProvider({ children }: { children: ReactNode }) {
       apiKey={process.env.NEXT_PUBLIC_ONCHAIN_KIT_API_KEY}
       chain={base}
       config={{
-        appearance: { mode: "auto" }
+        // İşte build hatasını susturacak "gizli" ayarlar:
+        appearance: {
+          mode: 'auto',
+        },
       }}
     >
       {children}
