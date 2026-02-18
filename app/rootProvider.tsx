@@ -10,7 +10,6 @@ export function RootProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const init = async () => {
       try {
-        // Farcaster siyah ekranını kaldıran komut
         await sdk.actions.ready();
       } catch (error) {
         console.error("Farcaster SDK error:", error);
@@ -23,6 +22,10 @@ export function RootProvider({ children }: { children: ReactNode }) {
     <OnchainKitProvider
       apiKey={process.env.NEXT_PUBLIC_ONCHAIN_KIT_API_KEY}
       chain={base}
+      config={{
+        // MiniKit hatasını bu blok çözecek
+        paymaster: "",
+      }}
     >
       {children}
     </OnchainKitProvider>
