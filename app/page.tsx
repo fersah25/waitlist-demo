@@ -1,25 +1,24 @@
 import { Metadata } from "next";
-import BaseShield from "./components/BaseShield";
+import BaseRunner from "./components/BaseRunner"; // BaseShield yerine BaseRunner'ı çağırıyoruz
 
-const appUrl = process.env.NEXT_PUBLIC_URL || "https://waitlist-demo-neon.vercel.app";
+const appUrl = process.env.NEXT_PUBLIC_URL || "https://senin-yeni-urlin.vercel.app";
 
 export const metadata: Metadata = {
-  title: "Base Shield",
-  description: "Security Checker for Base Network Tokens",
+  title: "Base Runner Game",
+  description: "Jump and collect Base logos!",
   openGraph: {
-    title: "Base Shield",
-    description: "Check token security on Base Network",
-    images: [`${appUrl}/park-1.jpg`], // Keeping image for now or use default
+    title: "Base Runner",
+    description: "The ultimate Base Network runner game",
+    images: [`${appUrl}/game-og-image.jpg`],
   },
   other: {
     "fc:frame": "vNext",
-    "fc:frame:image": `${appUrl}/park-1.jpg`,
-    "fc:frame:button:1": "Check Token Security",
-    "fc:frame:action": "link",
-    "fc:frame:target": appUrl,
+    "fc:frame:image": `${appUrl}/game-image.jpg`,
+    "fc:frame:button:1": "Play Base Runner",
   },
 };
 
 export default function Page() {
-  return <BaseShield />;
+  // Burası artık güvenlik tarayıcısını değil, oyunu açacak
+  return <BaseRunner />;
 }
