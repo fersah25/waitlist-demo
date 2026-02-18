@@ -1,28 +1,33 @@
 "use client";
 
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import sdk from "@farcaster/frame-sdk";
 import { OnchainKitProvider } from "@coinbase/onchainkit";
 import { base } from "viem/chains";
 
 export function RootProvider({ children }: { children: ReactNode }) {
+  const [isSDKReady, setIsSDKReady] = useState(false);
+
   useEffect(() => {
     const init = async () => {
-      if (typeof window !== "undefined") {
-        try {
-          await sdk.actions.ready();
-        } catch {
-          // 'e' harfini sildik, sadece catch bıraktık. Hata vermez.
-          console.log("Farcaster SDK loading...");
-        }
+      try {
+        // SDK'yı güvenli bir şekilde başlatıyoruz
+        await sdk.actions.ready();
+        setIsSDKReady(true);
+      } catch (error) {
+        console.error("Farcaster SDK hatası (Normal tarayıcı olabilir):", error);
+        setIsSDKReady(true); // Hata alsa bile siteyi açması için true yapıyoruz
       }
     };
-    init();
-  }, []);
+
+    if (!isSDKReady) {
+      init();
+    }
+  }, [isSDKReady]);
 
   return (
     <OnchainKitProvider
-      apiKey={process.env.NEXT_PUBLIC_ONCHAIN_KIT_API_KEY}
+      apiKey={process.env.NEXT_PUBLIC_ONCHAIN_KIT_API_KEY || ""}
       chain={base}
     >
       {children}
