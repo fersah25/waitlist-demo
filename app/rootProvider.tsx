@@ -8,9 +8,15 @@ import { base } from "viem/chains";
 export function RootProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const init = async () => {
-      try {
-        await sdk.actions.ready();
-      } catch (e) { console.error(e); }
+      // Sadece Farcaster içindeysek hazır olduğumuzu söyleyelim
+      // Bu sayede normal tarayıcıda site çökmez
+      if (typeof window !== "undefined") {
+        try {
+          await sdk.actions.ready();
+        } catch (e) {
+          console.error("Farcaster SDK not found, normal browser mode.");
+        }
+      }
     };
     init();
   }, []);
@@ -19,12 +25,6 @@ export function RootProvider({ children }: { children: ReactNode }) {
     <OnchainKitProvider
       apiKey={process.env.NEXT_PUBLIC_ONCHAIN_KIT_API_KEY}
       chain={base}
-      config={{
-        // İşte build hatasını susturacak "gizli" ayarlar:
-        appearance: {
-          mode: 'auto',
-        },
-      }}
     >
       {children}
     </OnchainKitProvider>
