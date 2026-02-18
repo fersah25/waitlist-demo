@@ -8,13 +8,12 @@ import { base } from "viem/chains";
 export function RootProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const init = async () => {
-      // Sadece Farcaster içindeysek hazır olduğumuzu söyleyelim
-      // Bu sayede normal tarayıcıda site çökmez
       if (typeof window !== "undefined") {
         try {
           await sdk.actions.ready();
-        } catch (e) {
-          console.error("Farcaster SDK not found, normal browser mode.");
+        } catch {
+          // 'e' harfini sildik, sadece catch bıraktık. Hata vermez.
+          console.log("Farcaster SDK loading...");
         }
       }
     };
