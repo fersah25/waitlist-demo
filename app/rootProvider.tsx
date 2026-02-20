@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode, useEffect, useState } from "react";
-import sdk from "@farcaster/frame-sdk";
+import sdk from "@farcaster/miniapp-sdk";
 import { OnchainKitProvider } from "@coinbase/onchainkit";
 import { base } from "viem/chains";
 
@@ -13,10 +13,10 @@ export function RootProvider({ children }: { children: ReactNode }) {
       try {
         // SDK'yı güvenli bir şekilde başlatıyoruz
         await sdk.actions.ready();
-        setIsSDKReady(true);
       } catch (error) {
         console.error("Farcaster SDK hatası (Normal tarayıcı olabilir):", error);
-        setIsSDKReady(true); // Hata alsa bile siteyi açması için true yapıyoruz
+      } finally {
+        setIsSDKReady(true);
       }
     };
 
@@ -25,10 +25,20 @@ export function RootProvider({ children }: { children: ReactNode }) {
     }
   }, [isSDKReady]);
 
+  if (!isSDKReady) {
+    return null;
+  }
+
   return (
     <OnchainKitProvider
       apiKey={process.env.NEXT_PUBLIC_ONCHAIN_KIT_API_KEY || ""}
       chain={base}
+      config={
+        {
+          // @ts-expect-error MiniKit is not explicitly typed in current OnchainKit version
+          appearance: { name: "Waitlist Demo", miniKit: true }
+        }
+      }
     >
       {children}
     </OnchainKitProvider>
