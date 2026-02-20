@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Source_Code_Pro } from "next/font/google";
 import { SafeArea } from "@coinbase/onchainkit/minikit";
 import { minikitConfig } from "@/minikit.config";
-import { RootProvider } from "./rootProvider";
+import DynamicProviders from "./components/DynamicProviders";
 import "./globals.css";
 export const dynamic = 'force-dynamic';
 export async function generateMetadata(): Promise<Metadata> {
@@ -55,12 +55,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <RootProvider>
-      <html lang="en">
-        <body className={`${inter.variable} ${sourceCodePro.variable}`}>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${inter.variable} ${sourceCodePro.variable}`} suppressHydrationWarning>
+        <DynamicProviders>
           <SafeArea>{children}</SafeArea>
-        </body>
-      </html>
-    </RootProvider>
+        </DynamicProviders>
+      </body>
+    </html>
   );
 } 
