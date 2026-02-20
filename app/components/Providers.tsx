@@ -25,15 +25,18 @@ export default function Providers({ children }: { children: ReactNode }) {
     }
   }, [isSDKReady]);
 
-  if (!isSDKReady) {
-    return null;
-  }
+  // Removed "if (!isSDKReady) return null;" to ensure the app doesn't show a blank screen on non-Farcaster web browsers.
 
   return (
     <OnchainKitProvider
-      apiKey={process.env.NEXT_PUBLIC_ONCHAIN_KIT_API_KEY || ""}
+      apiKey={process.env.NEXT_PUBLIC_ONCHAIN_KIT_API_KEY || "public"}
       chain={base}
-      config={{ appearance: { name: "Waitlist Demo", mode: 'auto' } }}
+      config={
+        {
+          // @ts-expect-error some versions of OnchainKit don't type miniKit explicitly.
+          appearance: { name: "Waitlist Demo", miniKit: true }
+        }
+      }
     >
       {children}
     </OnchainKitProvider>
