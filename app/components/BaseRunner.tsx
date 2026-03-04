@@ -164,6 +164,10 @@ export default function BaseRunner() {
         }
     }, []);
 
+    // Touch variables
+    const touchStartX = useRef(0);
+    const touchStartY = useRef(0);
+
     // --- Input ---
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -200,11 +204,73 @@ export default function BaseRunner() {
             }
         };
 
+        const handleTouchStart = (e: TouchEvent) => {
+            if (gameState !== 'playing') return;
+            touchStartX.current = e.touches[0].clientX;
+            touchStartY.current = e.touches[0].clientY;
+        };
+
+        const handleTouchMove = (e: TouchEvent) => {
+            if (gameState !== 'playing') return;
+            if (touchStartX.current === 0 && touchStartY.current === 0) return;
+
+            const touchEndX = e.touches[0].clientX;
+            const touchEndY = e.touches[0].clientY;
+
+            const dx = touchEndX - touchStartX.current;
+            const dy = touchEndY - touchStartY.current;
+
+            // Require a minimum swipe distance (e.g., 30px)
+            if (Math.abs(dx) > 30 || Math.abs(dy) > 30) {
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    // Horizontal swipe
+                    if (dx > 0) {
+                        playerLane.current = Math.min(LANE_COUNT - 1, playerLane.current + 1); // Right
+                    } else {
+                        playerLane.current = Math.max(0, playerLane.current - 1); // Left
+                    }
+                } else {
+                    // Vertical swipe
+                    if (dy < 0) {
+                        // Swipe up (Jump)
+                        if (playerY.current === GROUND_Y) {
+                            playerVy.current = JUMP_FORCE;
+                        }
+                    } else {
+                        // Swipe down (Duck)
+                        isDucking.current = true;
+                        if (playerY.current < GROUND_Y) {
+                            playerVy.current += 10;
+                        }
+                        // Reset duck state after 500ms for swipe down
+                        setTimeout(() => {
+                            isDucking.current = false;
+                        }, 500);
+                    }
+                }
+
+                // Reset to avoid continuous triggering
+                touchStartX.current = 0;
+                touchStartY.current = 0;
+            }
+        };
+
+        const handleTouchEnd = () => {
+            touchStartX.current = 0;
+            touchStartY.current = 0;
+        };
+
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
+        window.addEventListener('touchstart', handleTouchStart);
+        window.addEventListener('touchmove', handleTouchMove, { passive: false });
+        window.addEventListener('touchend', handleTouchEnd);
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('keyup', handleKeyUp);
+            window.removeEventListener('touchstart', handleTouchStart);
+            window.removeEventListener('touchmove', handleTouchMove);
+            window.removeEventListener('touchend', handleTouchEnd);
         };
     }, [gameState]);
 
@@ -506,7 +572,7 @@ export default function BaseRunner() {
         <div style={{
             position: 'relative', width: '100vw', height: '100vh',
             backgroundColor: COLOR_BG_TOP, overflow: 'hidden',
-            fontFamily: 'monospace', userSelect: 'none'
+            fontFamily: 'monospace', userSelect: 'none', touchAction: 'none'
         }}>
             {/* HUD: Top Left (Level & Score) */}
             <div style={{
@@ -547,7 +613,6 @@ export default function BaseRunner() {
                     i
                 </div>
 
-                {/* Info Overlay */}
                 {showInfo && (
                     <div style={{
                         position: 'absolute', top: '50px', right: 0,
@@ -559,8 +624,9 @@ export default function BaseRunner() {
                         lineHeight: '1.5',
                         boxShadow: `0 0 15px ${COLOR_LANE}`
                     }}>
-                        <p style={{ margin: '0 0 10px 0' }}>Jump: <strong>Space / Up / W</strong></p>
-                        <p style={{ margin: '0 0 10px 0' }}>Duck: <strong>Down / S</strong></p>
+                        <p style={{ margin: '0 0 10px 0' }}>Move: <strong>WASD / Arrows / Swipe L-R</strong></p>
+                        <p style={{ margin: '0 0 10px 0' }}>Jump: <strong>Space / Up / W / Swipe Up</strong></p>
+                        <p style={{ margin: '0 0 10px 0' }}>Duck: <strong>Down / S / Swipe Down</strong></p>
                         <p style={{ margin: 0 }}>Collect Base Coins for Rewards!</p>
                     </div>
                 )}
@@ -586,7 +652,7 @@ export default function BaseRunner() {
                 textAlign: 'center', pointerEvents: 'none', zIndex: 10,
                 color: 'rgba(255,255,255,0.5)', fontSize: '0.9rem'
             }}>
-                WASD / ARROWS to Move • SPACE to Jump
+                WASD / ARROWS / SWIPE to Move • SPACE / SWIPE UP to Jump
             </div>
 
             <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
